@@ -736,8 +736,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 spellcheck: false,
                 autocorrect: false,
                 autocapitalize: false,
-                scrollbarStyle: 'overlay',
-                viewportMargin: Infinity,
+                viewportMargin: 100,
                 extraKeys: {
                     'Ctrl-/': 'toggleComment',
                     'Cmd-/': 'toggleComment',
@@ -821,12 +820,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 editorContainers.forEach(container => container.classList.remove('active'));
                 document.getElementById(`${targetTab}-container`).classList.add('active');
 
-                // 刷新当前编辑器
-                editors[targetTab].refresh();
+                // 刷新当前编辑器（安全检查）
+                if (editors[targetTab]) {
+                    editors[targetTab].refresh();
 
-                // 更新光标位置
-                const cursor = editors[targetTab].getCursor();
-                cursorPosition.textContent = `行 ${cursor.line + 1}, 列 ${cursor.ch + 1}`;
+                    // 更新光标位置
+                    const cursor = editors[targetTab].getCursor();
+                    cursorPosition.textContent = `行 ${cursor.line + 1}, 列 ${cursor.ch + 1}`;
+                }
             });
         });
 
@@ -1098,10 +1099,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // 生成完整的 HTML 文档
         function generateFullHtml() {
-            const htmlCode = editors.html.getValue().trim();
-            const cssCode = editors.css.getValue().trim();
-            const jsCode = editors.js.getValue().trim();
-            const tsCode = editors.ts.getValue().trim();
+            const htmlCode = editors.html ? editors.html.getValue().trim() : '';
+            const cssCode = editors.css ? editors.css.getValue().trim() : '';
+            const jsCode = editors.js ? editors.js.getValue().trim() : '';
+            const tsCode = editors.ts ? editors.ts.getValue().trim() : '';
 
             let allJsCode = '';
 
@@ -1179,6 +1180,10 @@ document.addEventListener('DOMContentLoaded', function() {
         // 格式化当前编辑器代码
         function formatCurrentEditor() {
             const editor = editors[currentTab];
+            if (!editor) {
+                showError('编辑器未初始化，请刷新页面重试');
+                return;
+            }
             const code = editor.getValue();
             const formatted = formatCode(code, currentTab);
             
@@ -1190,7 +1195,9 @@ document.addEventListener('DOMContentLoaded', function() {
         function clearEditors() {
             if (confirm('确定要清空所有代码吗？')) {
                 Object.keys(editors).forEach(key => {
-                    editors[key].setValue('');
+                    if (editors[key]) {
+                        editors[key].setValue('');
+                    }
                 });
 
                 // 重置预览
