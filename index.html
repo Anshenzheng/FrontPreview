@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端代码预览工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/typescript@5.4.5/lib/typescript.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+            gap: 1rem;
+        }
+
+        .content {
+            display: flex;
+            flex: 1;
+            gap: 1rem;
+            min-height: 0;
+        }
+
+        .editor-panel {
+            flex: 1;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 0.5rem 0.5rem 0;
+        }
+
+        .tab {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            background: transparent;
+            color: #64748b;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 8px 8px 0 0;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .tab:hover {
+            background: #e2e8f0;
+            color: #475569;
+        }
+
+        .tab.active {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #667eea;
+        }
+
+        .editor-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .code-editor {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            padding: 1rem;
+            font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+            font-size: 0.875rem;
+            line-height: 1.6;
+            border: none;
+            resize: none;
+            outline: none;
+            background: #0f172a;
+            color: #e2e8f0;
+            display: none;
+        }
+
+        .code-editor.active {
+            display: block;
+        }
+
+        .code-editor::placeholder {
+            color: #64748b;
+        }
+
+        .code-editor:focus {
+            background: #1e293b;
+        }
+
+        .preview-panel {
+            flex: 1;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .preview-header {
+            background: #f8fafc;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .preview-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #475569;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .preview-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #94a3b8;
+        }
+
+        .preview-indicator.active {
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .preview-container {
+            flex: 1;
+            position: relative;
+            background: #f8fafc;
+        }
+
+        .preview-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: white;
+        }
+
+        .empty-state {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #94a3b8;
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .empty-state p {
+            font-size: 0.875rem;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            padding: 1rem;
+        }
+
+        .btn {
+            padding: 0.75rem 2rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #64748b;
+            border: 1px solid #e2e8f0;
+        }
+
+        .btn-secondary:hover {
+            background: #f8fafc;
+            color: #475569;
+        }
+
+        .status-bar {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 0.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.8);
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .error-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #fef2f2;
+            border-top: 2px solid #ef4444;
+            padding: 0.75rem 1rem;
+            display: none;
+            z-index: 10;
+        }
+
+        .error-container.show {
+            display: block;
+        }
+
+        .error-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #dc2626;
+            margin-bottom: 0.25rem;
+        }
+
+        .error-message {
+            font-size: 0.75rem;
+            color: #991b1b;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+
+        .success-indicator {
+            position: fixed;
+            top: 2rem;
+            right: 2rem;
+            background: #10b981;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+            transform: translateX(150%);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+        }
+
+        .success-indicator.show {
+            transform: translateX(0);
+        }
+
+        @media (max-width: 1024px) {
+            .content {
+                flex-direction: column;
+            }
+
+            .editor-panel,
+            .preview-panel {
+                min-height: 300px;
+            }
+        }
+
+        .line-numbers {
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 3rem;
+            background: #1e293b;
+            padding: 1rem 0.5rem;
+            font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+            font-size: 0.875rem;
+            line-height: 1.6;
+            color: #64748b;
+            text-align: right;
+            user-select: none;
+            overflow: hidden;
+            z-index: 1;
+            display: none;
+        }
+
+        .editor-container.active .line-numbers {
+            display: block;
+        }
+
+        .editor-container.active .code-editor {
+            padding-left: 3.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">🎨 代码预览工具</div>
+        <div style="display: flex; gap: 0.5rem;">
+            <div style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57;"></div>
+            <div style="width: 12px; height: 12px; border-radius: 50%; background: #ffbd2e;"></div>
+            <div style="width: 12px; height: 12px; border-radius: 50%; background: #28ca41;"></div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="content">
+            <div class="editor-panel">
+                <div class="tabs">
+                    <button class="tab active" data-tab="html">HTML</button>
+                    <button class="tab" data-tab="css">CSS</button>
+                    <button class="tab" data-tab="js">JavaScript</button>
+                    <button class="tab" data-tab="ts">TypeScript</button>
+                </div>
+
+                <div class="editor-container active" id="html-container">
+                    <div class="line-numbers" id="html-line-numbers">1</div>
+                    <textarea class="code-editor active" id="html-editor" placeholder="输入 HTML 代码...">
+<div class="container">
+    <h1>Hello, World!</h1>
+    <p>这是一个简单的前端代码预览工具演示。</p>
+    <button id="clickMe">点击我</button>
+    <div id="output"></div>
+</div>
+                    </textarea>
+                </div>
+
+                <div class="editor-container" id="css-container">
+                    <div class="line-numbers" id="css-line-numbers">1</div>
+                    <textarea class="code-editor" id="css-editor" placeholder="输入 CSS 代码...">
+.container {
+    max-width: 800px;
+    margin: 50px auto;
+    padding: 2rem;
+    text-align: center;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+h1 {
+    color: #667eea;
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+p {
+    color: #64748b;
+    font-size: 1.25rem;
+    margin-bottom: 2rem;
+}
+
+button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 1rem 2rem;
+    font-size: 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+#output {
+    margin-top: 2rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    color: #475569;
+}
+                    </textarea>
+                </div>
+
+                <div class="editor-container" id="js-container">
+                    <div class="line-numbers" id="js-line-numbers">1</div>
+                    <textarea class="code-editor" id="js-editor" placeholder="输入 JavaScript 代码...">
+document.getElementById('clickMe').addEventListener('click', function() {
+    const output = document.getElementById('output');
+    const currentTime = new Date().toLocaleTimeString();
+    output.innerHTML = `按钮已点击！当前时间: <strong>${currentTime}</strong>`;
+    
+    // 添加简单动画效果
+    output.style.animation = 'none';
+    output.offsetHeight; // 触发重排
+    output.style.animation = 'pulse 0.5s ease';
+});
+
+// 添加样式
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.02); }
+        100% { transform: scale(1); }
+    }
+`;
+document.head.appendChild(style);
+                    </textarea>
+                </div>
+
+                <div class="editor-container" id="ts-container">
+                    <div class="line-numbers" id="ts-line-numbers">1</div>
+                    <textarea class="code-editor" id="ts-editor" placeholder="输入 TypeScript 代码...">
+// TypeScript 示例代码
+interface User {
+    name: string;
+    age: number;
+    email: string;
+}
+
+function createUser(name: string, age: number, email: string): User {
+    return { name, age, email };
+}
+
+function greetUser(user: User): string {
+    return `你好, ${user.name}! 你今年 ${user.age} 岁了。`;
+}
+
+// 使用示例
+const user: User = createUser('张三', 25, 'zhangsan@example.com');
+const greeting: string = greetUser(user);
+
+console.log(greeting);
+
+// 将结果显示到页面
+document.addEventListener('DOMContentLoaded', function() {
+    const outputDiv = document.createElement('div');
+    outputDiv.style.cssText = `
+        margin-top: 20px;
+        padding: 15px;
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        border-radius: 8px;
+        border-left: 4px solid #0ea5e9;
+    `;
+    outputDiv.innerHTML = `
+        <h3 style="color: #0369a1; margin-bottom: 10px;">TypeScript 执行结果:</h3>
+        <p style="color: #1e40af; font-family: monospace;">${greeting}</p>
+        <p style="color: #64748b; font-size: 0.875rem; margin-top: 10px;">
+            用户信息: ${JSON.stringify(user)}
+        </p>
+    `;
+    document.body.appendChild(outputDiv);
+});
+                    </textarea>
+                </div>
+
+                <div class="error-container" id="error-container">
+                    <div class="error-title">❌ 编译错误</div>
+                    <div class="error-message" id="error-message"></div>
+                </div>
+            </div>
+
+            <div class="preview-panel">
+                <div class="preview-header">
+                    <div class="preview-title">
+                        <div class="preview-indicator" id="preview-indicator"></div>
+                        预览区域
+                    </div>
+                    <span style="font-size: 0.75rem; color: #94a3b8;" id="preview-status">等待预览...</span>
+                </div>
+                <div class="preview-container" id="preview-container">
+                    <div class="empty-state" id="empty-state">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        <p>点击 "运行预览" 按钮查看效果</p>
+                    </div>
+                    <iframe class="preview-iframe" id="preview-iframe" style="display: none;"></iframe>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn btn-secondary" id="clear-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+                清空代码
+            </button>
+            <button class="btn btn-primary" id="run-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                运行预览
+            </button>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span>支持 HTML / CSS / JavaScript / TypeScript</span>
+        <span>纯前端实现 · 实时预览</span>
+    </div>
+
+    <div class="success-indicator" id="success-indicator">
+        ✅ 预览更新成功！
+    </div>
+
+    <script>
+        // 获取DOM元素
+        const tabs = document.querySelectorAll('.tab');
+        const editors = document.querySelectorAll('.code-editor');
+        const editorContainers = document.querySelectorAll('.editor-container');
+        const runBtn = document.getElementById('run-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const previewIframe = document.getElementById('preview-iframe');
+        const emptyState = document.getElementById('empty-state');
+        const previewIndicator = document.getElementById('preview-indicator');
+        const previewStatus = document.getElementById('preview-status');
+        const errorContainer = document.getElementById('error-container');
+        const errorMessage = document.getElementById('error-message');
+        const successIndicator = document.getElementById('success-indicator');
+
+        // 获取所有编辑器
+        const htmlEditor = document.getElementById('html-editor');
+        const cssEditor = document.getElementById('css-editor');
+        const jsEditor = document.getElementById('js-editor');
+        const tsEditor = document.getElementById('ts-editor');
+
+        // 行号更新函数
+        function updateLineNumbers(editor, lineNumbersElement) {
+            const lines = editor.value.split('\n');
+            const lineCount = lines.length;
+            let lineNumbersHtml = '';
+            for (let i = 1; i <= lineCount; i++) {
+                lineNumbersHtml += i + '\n';
+            }
+            lineNumbersElement.textContent = lineNumbersHtml.trim();
+        }
+
+        // 初始化行号
+        function initLineNumbers() {
+            updateLineNumbers(htmlEditor, document.getElementById('html-line-numbers'));
+            updateLineNumbers(cssEditor, document.getElementById('css-line-numbers'));
+            updateLineNumbers(jsEditor, document.getElementById('js-line-numbers'));
+            updateLineNumbers(tsEditor, document.getElementById('ts-line-numbers'));
+        }
+
+        // 为所有编辑器添加行号更新事件
+        function addLineNumberListeners() {
+            htmlEditor.addEventListener('input', () => updateLineNumbers(htmlEditor, document.getElementById('html-line-numbers')));
+            cssEditor.addEventListener('input', () => updateLineNumbers(cssEditor, document.getElementById('css-line-numbers')));
+            jsEditor.addEventListener('input', () => updateLineNumbers(jsEditor, document.getElementById('js-line-numbers')));
+            tsEditor.addEventListener('input', () => updateLineNumbers(tsEditor, document.getElementById('ts-line-numbers')));
+        }
+
+        // 选项卡切换
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetTab = tab.dataset.tab;
+
+                // 更新选项卡状态
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                // 更新编辑器显示
+                editors.forEach(editor => editor.classList.remove('active'));
+                editorContainers.forEach(container => container.classList.remove('active'));
+
+                const targetEditor = document.getElementById(`${targetTab}-editor`);
+                const targetContainer = document.getElementById(`${targetTab}-container`);
+                if (targetEditor) targetEditor.classList.add('active');
+                if (targetContainer) targetContainer.classList.add('active');
+            });
+        });
+
+        // 编译TypeScript为JavaScript
+        function compileTypeScript(tsCode) {
+            try {
+                // 使用TypeScript编译器API
+                const result = ts.transpileModule(tsCode, {
+                    compilerOptions: {
+                        module: ts.ModuleKind.ESNext,
+                        target: ts.ScriptTarget.ESNext,
+                        strict: false,
+                        esModuleInterop: true,
+                        skipLibCheck: true
+                    }
+                });
+                return {
+                    success: true,
+                    jsCode: result.outputText,
+                    error: null
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    jsCode: null,
+                    error: error.message
+                };
+            }
+        }
+
+        // 显示错误
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorContainer.classList.add('show');
+        }
+
+        // 隐藏错误
+        function hideError() {
+            errorContainer.classList.remove('show');
+        }
+
+        // 显示成功提示
+        function showSuccess() {
+            successIndicator.classList.add('show');
+            setTimeout(() => {
+                successIndicator.classList.remove('show');
+            }, 2000);
+        }
+
+        // 生成完整的HTML文档
+        function generateFullHtml() {
+            const htmlCode = htmlEditor.value.trim();
+            const cssCode = cssEditor.value.trim();
+            const jsCode = jsEditor.value.trim();
+            const tsCode = tsEditor.value.trim();
+
+            let finalJsCode = jsCode;
+
+            // 如果有TypeScript代码，优先使用TypeScript
+            if (tsCode) {
+                const compileResult = compileTypeScript(tsCode);
+                if (compileResult.success) {
+                    finalJsCode = compileResult.jsCode;
+                } else {
+                    showError('TypeScript 编译错误: ' + compileResult.error);
+                    return null;
+                }
+            }
+
+            // 构建完整的HTML
+            let fullHtml = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>预览结果</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f8fafc;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        ${cssCode}
+    </style>
+</head>
+<body>
+    ${htmlCode}
+    <script>
+        ${finalJsCode}
+    <\/script>
+</body>
+</html>`;
+
+            return fullHtml;
+        }
+
+        // 运行预览
+        function runPreview() {
+            hideError();
+
+            const fullHtml = generateFullHtml();
+            if (!fullHtml) return;
+
+            // 显示iframe，隐藏空状态
+            emptyState.style.display = 'none';
+            previewIframe.style.display = 'block';
+
+            // 更新预览状态
+            previewIndicator.classList.add('active');
+            previewStatus.textContent = '预览已更新';
+
+            // 将HTML写入iframe
+            previewIframe.srcdoc = fullHtml;
+
+            // 显示成功提示
+            showSuccess();
+        }
+
+        // 清空所有编辑器
+        function clearEditors() {
+            if (confirm('确定要清空所有代码吗？')) {
+                htmlEditor.value = '';
+                cssEditor.value = '';
+                jsEditor.value = '';
+                tsEditor.value = '';
+
+                // 更新行号
+                initLineNumbers();
+
+                // 重置预览
+                emptyState.style.display = 'block';
+                previewIframe.style.display = 'none';
+                previewIndicator.classList.remove('active');
+                previewStatus.textContent = '等待预览...';
+                hideError();
+            }
+        }
+
+        // 绑定事件
+        runBtn.addEventListener('click', runPreview);
+        clearBtn.addEventListener('click', clearEditors);
+
+        // 支持快捷键 Ctrl+Enter 运行预览
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') {
+                e.preventDefault();
+                runPreview();
+            }
+        });
+
+        // 初始化
+        initLineNumbers();
+        addLineNumberListeners();
+    </script>
+</body>
+</html>
