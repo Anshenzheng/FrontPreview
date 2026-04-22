@@ -6,6 +6,26 @@
     <title>前端代码预览工具</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/typescript@5.4.5/lib/typescript.min.js"></script>
+    
+    <!-- CodeMirror 5 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/monokai.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/lint/lint.min.css">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    
+    <!-- CodeMirror 模式 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+    
+    <!-- CodeMirror 插件 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/comment/comment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/lint/lint.min.js"></script>
+    
     <style>
         * {
             margin: 0;
@@ -15,136 +35,182 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
         }
 
         .header {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(10px);
-            padding: 1rem 2rem;
+            padding: 0.75rem 1.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            flex-shrink: 0;
         }
 
         .logo {
-            font-size: 1.5rem;
-            font-weight: bold;
+            font-size: 1.25rem;
+            font-weight: 600;
             color: white;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo svg {
+            width: 24px;
+            height: 24px;
         }
 
         .main-container {
             flex: 1;
             display: flex;
             flex-direction: column;
-            padding: 1rem;
-            gap: 1rem;
+            padding: 0.75rem;
+            gap: 0.75rem;
+            min-height: 0;
+            overflow: hidden;
         }
 
         .content {
             display: flex;
             flex: 1;
-            gap: 1rem;
+            gap: 0.75rem;
             min-height: 0;
+            overflow: hidden;
         }
 
         .editor-panel {
             flex: 1;
-            background: white;
+            background: rgba(30, 30, 46, 0.95);
             border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .tabs {
             display: flex;
-            background: #f8fafc;
-            border-bottom: 1px solid #e2e8f0;
+            background: rgba(0, 0, 0, 0.2);
             padding: 0.5rem 0.5rem 0;
+            flex-shrink: 0;
         }
 
         .tab {
-            padding: 0.75rem 1.5rem;
+            padding: 0.6rem 1.25rem;
             border: none;
             background: transparent;
-            color: #64748b;
-            font-size: 0.875rem;
-            font-weight: 600;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.8rem;
+            font-weight: 500;
             cursor: pointer;
             border-radius: 8px 8px 0 0;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             position: relative;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tab svg {
+            width: 14px;
+            height: 14px;
         }
 
         .tab:hover {
-            background: #e2e8f0;
-            color: #475569;
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.7);
         }
 
         .tab.active {
-            background: white;
-            color: #667eea;
-            box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+            background: rgba(30, 30, 46, 0.95);
+            color: #7c3aed;
         }
 
         .tab.active::after {
             content: '';
             position: absolute;
-            bottom: -1px;
+            bottom: 0;
             left: 0;
             right: 0;
             height: 2px;
-            background: #667eea;
+            background: linear-gradient(90deg, #7c3aed, #ec4899);
         }
 
         .editor-container {
             flex: 1;
             position: relative;
             overflow: hidden;
-        }
-
-        .code-editor {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            padding: 1rem;
-            font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
-            font-size: 0.875rem;
-            line-height: 1.6;
-            border: none;
-            resize: none;
-            outline: none;
-            background: #0f172a;
-            color: #e2e8f0;
             display: none;
         }
 
-        .code-editor.active {
+        .editor-container.active {
             display: block;
         }
 
-        .code-editor::placeholder {
-            color: #64748b;
+        /* CodeMirror 自定义样式 */
+        .CodeMirror {
+            height: 100% !important;
+            font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.6;
         }
 
-        .code-editor:focus {
-            background: #1e293b;
+        .CodeMirror-gutters {
+            background: #1e1e2e;
+            border-right: 1px solid #313244;
         }
+
+        .CodeMirror-linenumber {
+            color: #6c7086;
+            padding: 0 8px;
+        }
+
+        .cm-s-monokai.CodeMirror {
+            background: #1e1e2e;
+        }
+
+        .cm-s-monokai div.CodeMirror-selected {
+            background: rgba(124, 58, 237, 0.3);
+        }
+
+        .cm-s-monokai .CodeMirror-line::selection,
+        .cm-s-monokai .CodeMirror-line > span::selection,
+        .cm-s-monokai .CodeMirror-line > span > span::selection {
+            background: rgba(124, 58, 237, 0.3);
+        }
+
+        .cm-s-monokai .CodeMirror-cursor {
+            border-left: 2px solid #f8f8f2;
+        }
+
+        .cm-s-monokai span.cm-comment { color: #6c7086; }
+        .cm-s-monokai span.cm-atom { color: #cba6f7; }
+        .cm-s-monokai span.cm-number { color: #fab387; }
+        .cm-s-monokai span.cm-property { color: #89dceb; }
+        .cm-s-monokai span.cm-attribute { color: #a6e3a1; }
+        .cm-s-monokai span.cm-keyword { color: #cba6f7; }
+        .cm-s-monokai span.cm-string { color: #a6e3a1; }
+        .cm-s-monokai span.cm-variable { color: #f9e2af; }
+        .cm-s-monokai span.cm-variable-2 { color: #89b4fa; }
+        .cm-s-monokai span.cm-def { color: #f9e2af; }
+        .cm-s-monokai span.cm-bracket { color: #f8f8f2; }
+        .cm-s-monokai span.cm-tag { color: #f38ba8; }
+        .cm-s-monokai span.cm-link { color: #89b4fa; }
+        .cm-s-monokai span.cm-error { color: #f38ba8; }
 
         .preview-panel {
             flex: 1;
             background: white;
             border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
             display: flex;
             flex-direction: column;
             overflow: hidden;
@@ -157,10 +223,11 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            flex-shrink: 0;
         }
 
         .preview-title {
-            font-size: 0.875rem;
+            font-size: 0.85rem;
             font-weight: 600;
             color: #475569;
             display: flex;
@@ -181,18 +248,14 @@
         }
 
         @keyframes pulse {
-            0%, 100% {
-                opacity: 1;
-            }
-            50% {
-                opacity: 0.5;
-            }
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
 
         .preview-container {
             flex: 1;
             position: relative;
-            background: #f8fafc;
+            background: #f1f5f9;
         }
 
         .preview-iframe {
@@ -225,59 +288,61 @@
         .controls {
             display: flex;
             justify-content: center;
-            gap: 1rem;
-            padding: 1rem;
+            gap: 0.75rem;
+            padding: 0.5rem;
+            flex-shrink: 0;
         }
 
         .btn {
-            padding: 0.75rem 2rem;
+            padding: 0.6rem 1.5rem;
             border: none;
             border-radius: 8px;
-            font-size: 0.875rem;
-            font-weight: 600;
+            font-size: 0.85rem;
+            font-weight: 500;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             display: flex;
             align-items: center;
             gap: 0.5rem;
         }
 
+        .btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #7c3aed 0%, #ec4899 100%);
             color: white;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 4px 15px rgba(124, 58, 237, 0.4);
         }
 
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
-        }
-
-        .btn-primary:active {
-            transform: translateY(0);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5);
         }
 
         .btn-secondary {
-            background: white;
-            color: #64748b;
-            border: 1px solid #e2e8f0;
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .btn-secondary:hover {
-            background: #f8fafc;
-            color: #475569;
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
         }
 
         .status-bar {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            padding: 0.5rem 2rem;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 0.4rem 1.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 0.75rem;
-            color: rgba(255, 255, 255, 0.8);
-            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.5);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            flex-shrink: 0;
         }
 
         .error-container {
@@ -285,11 +350,13 @@
             bottom: 0;
             left: 0;
             right: 0;
-            background: #fef2f2;
-            border-top: 2px solid #ef4444;
+            background: rgba(243, 139, 168, 0.15);
+            border-top: 2px solid #f38ba8;
             padding: 0.75rem 1rem;
             display: none;
             z-index: 10;
+            max-height: 150px;
+            overflow-y: auto;
         }
 
         .error-container.show {
@@ -299,35 +366,56 @@
         .error-title {
             font-size: 0.75rem;
             font-weight: 600;
-            color: #dc2626;
+            color: #f38ba8;
             margin-bottom: 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         .error-message {
             font-size: 0.75rem;
-            color: #991b1b;
+            color: #f5e0dc;
             font-family: monospace;
             white-space: pre-wrap;
+            line-height: 1.5;
         }
 
         .success-indicator {
             position: fixed;
-            top: 2rem;
-            right: 2rem;
+            top: 1.5rem;
+            right: 1.5rem;
             background: #10b981;
             color: white;
-            padding: 0.75rem 1.5rem;
+            padding: 0.75rem 1.25rem;
             border-radius: 8px;
-            font-size: 0.875rem;
-            font-weight: 600;
+            font-size: 0.85rem;
+            font-weight: 500;
             box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
             transform: translateX(150%);
             transition: transform 0.3s ease;
             z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         .success-indicator.show {
             transform: translateX(0);
+        }
+
+        .mode-indicator {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.4);
+            padding: 0.25rem 0.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        .keyboard-hint {
+            font-size: 0.65rem;
+            color: rgba(255, 255, 255, 0.3);
+            margin-left: 0.5rem;
         }
 
         @media (max-width: 1024px) {
@@ -337,45 +425,50 @@
 
             .editor-panel,
             .preview-panel {
-                min-height: 300px;
+                min-height: 40vh;
             }
         }
 
-        .line-numbers {
-            position: absolute;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            width: 3rem;
-            background: #1e293b;
-            padding: 1rem 0.5rem;
-            font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
-            font-size: 0.875rem;
-            line-height: 1.6;
-            color: #64748b;
-            text-align: right;
-            user-select: none;
-            overflow: hidden;
-            z-index: 1;
-            display: none;
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
         }
 
-        .editor-container.active .line-numbers {
-            display: block;
+        ::-webkit-scrollbar-track {
+            background: #1e1e2e;
         }
 
-        .editor-container.active .code-editor {
-            padding-left: 3.5rem;
+        ::-webkit-scrollbar-thumb {
+            background: #45475a;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #585b70;
+        }
+
+        .CodeMirror-overlayscroll-horizontal div,
+        .CodeMirror-overlayscroll-vertical div {
+            background: #45475a !important;
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="logo">🎨 代码预览工具</div>
-        <div style="display: flex; gap: 0.5rem;">
-            <div style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57;"></div>
-            <div style="width: 12px; height: 12px; border-radius: 50%; background: #ffbd2e;"></div>
-            <div style="width: 12px; height: 12px; border-radius: 50%; background: #28ca41;"></div>
+        <div class="logo">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+            </svg>
+            代码预览工具
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span class="mode-indicator">HTML/CSS/JS/TS</span>
+            <div style="display: flex; gap: 0.35rem;">
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #f38ba8;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #f9e2af;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #a6e3a1;"></div>
+            </div>
         </div>
     </div>
 
@@ -383,28 +476,128 @@
         <div class="content">
             <div class="editor-panel">
                 <div class="tabs">
-                    <button class="tab active" data-tab="html">HTML</button>
-                    <button class="tab" data-tab="css">CSS</button>
-                    <button class="tab" data-tab="js">JavaScript</button>
-                    <button class="tab" data-tab="ts">TypeScript</button>
+                    <button class="tab active" data-tab="html">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                        HTML
+                    </button>
+                    <button class="tab" data-tab="css">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                        CSS
+                    </button>
+                    <button class="tab" data-tab="js">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                        </svg>
+                        JavaScript
+                    </button>
+                    <button class="tab" data-tab="ts">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        TypeScript
+                    </button>
                 </div>
 
                 <div class="editor-container active" id="html-container">
-                    <div class="line-numbers" id="html-line-numbers">1</div>
-                    <textarea class="code-editor active" id="html-editor" placeholder="输入 HTML 代码...">
-<div class="container">
+                    <textarea id="html-editor"></textarea>
+                </div>
+
+                <div class="editor-container" id="css-container">
+                    <textarea id="css-editor"></textarea>
+                </div>
+
+                <div class="editor-container" id="js-container">
+                    <textarea id="js-editor"></textarea>
+                </div>
+
+                <div class="editor-container" id="ts-container">
+                    <textarea id="ts-editor"></textarea>
+                </div>
+
+                <div class="error-container" id="error-container">
+                    <div class="error-title">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        错误
+                    </div>
+                    <div class="error-message" id="error-message"></div>
+                </div>
+            </div>
+
+            <div class="preview-panel">
+                <div class="preview-header">
+                    <div class="preview-title">
+                        <div class="preview-indicator" id="preview-indicator"></div>
+                        预览区域
+                    </div>
+                    <span style="font-size: 0.7rem; color: #94a3b8;" id="preview-status">等待预览...</span>
+                </div>
+                <div class="preview-container" id="preview-container">
+                    <div class="empty-state" id="empty-state">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        <p>点击 "运行预览" 或按 Ctrl+Enter</p>
+                    </div>
+                    <iframe class="preview-iframe" id="preview-iframe" style="display: none;"></iframe>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn btn-secondary" id="format-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
+                </svg>
+                格式化代码
+            </button>
+            <button class="btn btn-secondary" id="clear-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                清空代码
+            </button>
+            <button class="btn btn-primary" id="run-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                运行预览
+                <span class="keyboard-hint">Ctrl+Enter</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span>纯前端实现 · CodeMirror 语法高亮</span>
+        <span id="cursor-position">行 1, 列 1</span>
+    </div>
+
+    <div class="success-indicator" id="success-indicator">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        预览已更新
+    </div>
+
+    <script>
+        // 示例代码
+        const defaultCode = {
+            html: `<div class="container">
     <h1>Hello, World!</h1>
     <p>这是一个简单的前端代码预览工具演示。</p>
     <button id="clickMe">点击我</button>
     <div id="output"></div>
-</div>
-                    </textarea>
-                </div>
-
-                <div class="editor-container" id="css-container">
-                    <div class="line-numbers" id="css-line-numbers">1</div>
-                    <textarea class="code-editor" id="css-editor" placeholder="输入 CSS 代码...">
-.container {
+</div>`,
+            css: `.container {
     max-width: 800px;
     margin: 50px auto;
     padding: 2rem;
@@ -413,7 +606,7 @@
 }
 
 h1 {
-    color: #667eea;
+    color: #7c3aed;
     font-size: 3rem;
     margin-bottom: 1rem;
 }
@@ -425,7 +618,7 @@ p {
 }
 
 button {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #7c3aed 0%, #ec4899 100%);
     color: white;
     border: none;
     padding: 1rem 2rem;
@@ -437,7 +630,7 @@ button {
 
 button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 15px rgba(124, 58, 237, 0.4);
 }
 
 #output {
@@ -446,41 +639,29 @@ button:hover {
     background: #f8fafc;
     border-radius: 8px;
     color: #475569;
-}
-                    </textarea>
-                </div>
-
-                <div class="editor-container" id="js-container">
-                    <div class="line-numbers" id="js-line-numbers">1</div>
-                    <textarea class="code-editor" id="js-editor" placeholder="输入 JavaScript 代码...">
-document.getElementById('clickMe').addEventListener('click', function() {
+}`,
+            js: `document.getElementById('clickMe').addEventListener('click', function() {
     const output = document.getElementById('output');
     const currentTime = new Date().toLocaleTimeString();
-    output.innerHTML = `按钮已点击！当前时间: <strong>${currentTime}</strong>`;
+    output.innerHTML = \`按钮已点击！当前时间: <strong>\${currentTime}</strong>\`;
     
     // 添加简单动画效果
     output.style.animation = 'none';
-    output.offsetHeight; // 触发重排
+    output.offsetHeight;
     output.style.animation = 'pulse 0.5s ease';
 });
 
 // 添加样式
 const style = document.createElement('style');
-style.textContent = `
+style.textContent = \`
     @keyframes pulse {
         0% { transform: scale(1); }
         50% { transform: scale(1.02); }
         100% { transform: scale(1); }
     }
-`;
-document.head.appendChild(style);
-                    </textarea>
-                </div>
-
-                <div class="editor-container" id="ts-container">
-                    <div class="line-numbers" id="ts-line-numbers">1</div>
-                    <textarea class="code-editor" id="ts-editor" placeholder="输入 TypeScript 代码...">
-// TypeScript 示例代码
+\`;
+document.head.appendChild(style);`,
+            ts: `// TypeScript 示例代码
 interface User {
     name: string;
     age: number;
@@ -492,7 +673,7 @@ function createUser(name: string, age: number, email: string): User {
 }
 
 function greetUser(user: User): string {
-    return `你好, ${user.name}! 你今年 ${user.age} 岁了。`;
+    return \`你好, \${user.name}! 你今年 \${user.age} 岁了。\`;
 }
 
 // 使用示例
@@ -504,85 +685,30 @@ console.log(greeting);
 // 将结果显示到页面
 document.addEventListener('DOMContentLoaded', function() {
     const outputDiv = document.createElement('div');
-    outputDiv.style.cssText = `
+    outputDiv.style.cssText = \`
         margin-top: 20px;
         padding: 15px;
         background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
         border-radius: 8px;
         border-left: 4px solid #0ea5e9;
-    `;
-    outputDiv.innerHTML = `
+    \`;
+    outputDiv.innerHTML = \`
         <h3 style="color: #0369a1; margin-bottom: 10px;">TypeScript 执行结果:</h3>
-        <p style="color: #1e40af; font-family: monospace;">${greeting}</p>
+        <p style="color: #1e40af; font-family: monospace;">\${greeting}</p>
         <p style="color: #64748b; font-size: 0.875rem; margin-top: 10px;">
-            用户信息: ${JSON.stringify(user)}
+            用户信息: \${JSON.stringify(user)}
         </p>
-    `;
+    \`;
     document.body.appendChild(outputDiv);
-});
-                    </textarea>
-                </div>
+});`
+        };
 
-                <div class="error-container" id="error-container">
-                    <div class="error-title">❌ 编译错误</div>
-                    <div class="error-message" id="error-message"></div>
-                </div>
-            </div>
-
-            <div class="preview-panel">
-                <div class="preview-header">
-                    <div class="preview-title">
-                        <div class="preview-indicator" id="preview-indicator"></div>
-                        预览区域
-                    </div>
-                    <span style="font-size: 0.75rem; color: #94a3b8;" id="preview-status">等待预览...</span>
-                </div>
-                <div class="preview-container" id="preview-container">
-                    <div class="empty-state" id="empty-state">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                        <p>点击 "运行预览" 按钮查看效果</p>
-                    </div>
-                    <iframe class="preview-iframe" id="preview-iframe" style="display: none;"></iframe>
-                </div>
-            </div>
-        </div>
-
-        <div class="controls">
-            <button class="btn btn-secondary" id="clear-btn">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-                清空代码
-            </button>
-            <button class="btn btn-primary" id="run-btn">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                </svg>
-                运行预览
-            </button>
-        </div>
-    </div>
-
-    <div class="status-bar">
-        <span>支持 HTML / CSS / JavaScript / TypeScript</span>
-        <span>纯前端实现 · 实时预览</span>
-    </div>
-
-    <div class="success-indicator" id="success-indicator">
-        ✅ 预览更新成功！
-    </div>
-
-    <script>
-        // 获取DOM元素
+        // DOM 元素
         const tabs = document.querySelectorAll('.tab');
-        const editors = document.querySelectorAll('.code-editor');
         const editorContainers = document.querySelectorAll('.editor-container');
         const runBtn = document.getElementById('run-btn');
         const clearBtn = document.getElementById('clear-btn');
+        const formatBtn = document.getElementById('format-btn');
         const previewIframe = document.getElementById('preview-iframe');
         const emptyState = document.getElementById('empty-state');
         const previewIndicator = document.getElementById('preview-indicator');
@@ -590,64 +716,121 @@ document.addEventListener('DOMContentLoaded', function() {
         const errorContainer = document.getElementById('error-container');
         const errorMessage = document.getElementById('error-message');
         const successIndicator = document.getElementById('success-indicator');
+        const cursorPosition = document.getElementById('cursor-position');
 
-        // 获取所有编辑器
-        const htmlEditor = document.getElementById('html-editor');
-        const cssEditor = document.getElementById('css-editor');
-        const jsEditor = document.getElementById('js-editor');
-        const tsEditor = document.getElementById('ts-editor');
+        // CodeMirror 编辑器实例
+        let editors = {};
+        let currentTab = 'html';
 
-        // 行号更新函数
-        function updateLineNumbers(editor, lineNumbersElement) {
-            const lines = editor.value.split('\n');
-            const lineCount = lines.length;
-            let lineNumbersHtml = '';
-            for (let i = 1; i <= lineCount; i++) {
-                lineNumbersHtml += i + '\n';
-            }
-            lineNumbersElement.textContent = lineNumbersHtml.trim();
-        }
+        // 初始化 CodeMirror 编辑器
+        function initEditors() {
+            const commonOptions = {
+                theme: 'monokai',
+                lineNumbers: true,
+                lineWrapping: false,
+                indentUnit: 4,
+                tabSize: 4,
+                indentWithTabs: false,
+                autoCloseBrackets: true,
+                matchBrackets: true,
+                spellcheck: false,
+                autocorrect: false,
+                autocapitalize: false,
+                extraKeys: {
+                    'Ctrl-/': 'toggleComment',
+                    'Cmd-/': 'toggleComment',
+                    'Tab': function(cm) {
+                        cm.replaceSelection('    ');
+                    }
+                }
+            };
 
-        // 初始化行号
-        function initLineNumbers() {
-            updateLineNumbers(htmlEditor, document.getElementById('html-line-numbers'));
-            updateLineNumbers(cssEditor, document.getElementById('css-line-numbers'));
-            updateLineNumbers(jsEditor, document.getElementById('js-line-numbers'));
-            updateLineNumbers(tsEditor, document.getElementById('ts-line-numbers'));
-        }
+            // HTML 编辑器
+            editors.html = CodeMirror.fromTextArea(
+                document.getElementById('html-editor'),
+                {
+                    ...commonOptions,
+                    mode: 'htmlmixed',
+                    value: defaultCode.html
+                }
+            );
 
-        // 为所有编辑器添加行号更新事件
-        function addLineNumberListeners() {
-            htmlEditor.addEventListener('input', () => updateLineNumbers(htmlEditor, document.getElementById('html-line-numbers')));
-            cssEditor.addEventListener('input', () => updateLineNumbers(cssEditor, document.getElementById('css-line-numbers')));
-            jsEditor.addEventListener('input', () => updateLineNumbers(jsEditor, document.getElementById('js-line-numbers')));
-            tsEditor.addEventListener('input', () => updateLineNumbers(tsEditor, document.getElementById('ts-line-numbers')));
+            // CSS 编辑器
+            editors.css = CodeMirror.fromTextArea(
+                document.getElementById('css-editor'),
+                {
+                    ...commonOptions,
+                    mode: 'css',
+                    value: defaultCode.css
+                }
+            );
+
+            // JavaScript 编辑器
+            editors.js = CodeMirror.fromTextArea(
+                document.getElementById('js-editor'),
+                {
+                    ...commonOptions,
+                    mode: 'javascript',
+                    value: defaultCode.js
+                }
+            );
+
+            // TypeScript 编辑器
+            editors.ts = CodeMirror.fromTextArea(
+                document.getElementById('ts-editor'),
+                {
+                    ...commonOptions,
+                    mode: 'javascript',
+                    value: defaultCode.ts
+                }
+            );
+
+            // 为所有编辑器添加光标位置更新事件
+            Object.keys(editors).forEach(key => {
+                editors[key].on('cursorActivity', function(cm) {
+                    const cursor = cm.getCursor();
+                    cursorPosition.textContent = `行 ${cursor.line + 1}, 列 ${cursor.ch + 1}`;
+                });
+
+                editors[key].on('change', function() {
+                    hideError();
+                });
+            });
+
+            // 刷新编辑器以正确显示
+            setTimeout(() => {
+                Object.values(editors).forEach(editor => {
+                    editor.refresh();
+                });
+            }, 100);
         }
 
         // 选项卡切换
         tabs.forEach(tab => {
             tab.addEventListener('click', () => {
                 const targetTab = tab.dataset.tab;
+                currentTab = targetTab;
 
                 // 更新选项卡状态
                 tabs.forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
 
-                // 更新编辑器显示
-                editors.forEach(editor => editor.classList.remove('active'));
+                // 更新编辑器容器显示
                 editorContainers.forEach(container => container.classList.remove('active'));
+                document.getElementById(`${targetTab}-container`).classList.add('active');
 
-                const targetEditor = document.getElementById(`${targetTab}-editor`);
-                const targetContainer = document.getElementById(`${targetTab}-container`);
-                if (targetEditor) targetEditor.classList.add('active');
-                if (targetContainer) targetContainer.classList.add('active');
+                // 刷新当前编辑器
+                editors[targetTab].refresh();
+
+                // 更新光标位置
+                const cursor = editors[targetTab].getCursor();
+                cursorPosition.textContent = `行 ${cursor.line + 1}, 列 ${cursor.ch + 1}`;
             });
         });
 
-        // 编译TypeScript为JavaScript
+        // 编译 TypeScript 为 JavaScript
         function compileTypeScript(tsCode) {
             try {
-                // 使用TypeScript编译器API
                 const result = ts.transpileModule(tsCode, {
                     compilerOptions: {
                         module: ts.ModuleKind.ESNext,
@@ -671,6 +854,44 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        // 简单的代码格式化函数
+        function formatCode(code, type) {
+            if (!code || !code.trim()) return code;
+
+            let formatted = code;
+
+            // 简单的缩进处理
+            formatted = formatted
+                .replace(/\{/g, '{\n')
+                .replace(/\}/g, '\n}\n')
+                .replace(/;/g, ';\n');
+
+            // 移除多余的空行
+            formatted = formatted.replace(/\n\s*\n\s*\n/g, '\n\n');
+
+            // 简单的缩进
+            let indentLevel = 0;
+            const lines = formatted.split('\n');
+            const result = [];
+
+            for (let line of lines) {
+                line = line.trim();
+                if (!line) continue;
+
+                if (line.startsWith('}')) {
+                    indentLevel = Math.max(0, indentLevel - 1);
+                }
+
+                result.push('    '.repeat(indentLevel) + line);
+
+                if (line.endsWith('{')) {
+                    indentLevel++;
+                }
+            }
+
+            return result.join('\n');
+        }
+
         // 显示错误
         function showError(message) {
             errorMessage.textContent = message;
@@ -690,27 +911,32 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 2000);
         }
 
-        // 生成完整的HTML文档
+        // 生成完整的 HTML 文档
         function generateFullHtml() {
-            const htmlCode = htmlEditor.value.trim();
-            const cssCode = cssEditor.value.trim();
-            const jsCode = jsEditor.value.trim();
-            const tsCode = tsEditor.value.trim();
+            const htmlCode = editors.html.getValue().trim();
+            const cssCode = editors.css.getValue().trim();
+            const jsCode = editors.js.getValue().trim();
+            const tsCode = editors.ts.getValue().trim();
 
-            let finalJsCode = jsCode;
+            let allJsCode = '';
 
-            // 如果有TypeScript代码，优先使用TypeScript
+            // 如果有 JavaScript 代码，添加到结果中
+            if (jsCode) {
+                allJsCode += jsCode + '\n';
+            }
+
+            // 如果有 TypeScript 代码，编译后添加到结果中
             if (tsCode) {
                 const compileResult = compileTypeScript(tsCode);
                 if (compileResult.success) {
-                    finalJsCode = compileResult.jsCode;
+                    allJsCode += compileResult.jsCode + '\n';
                 } else {
                     showError('TypeScript 编译错误: ' + compileResult.error);
                     return null;
                 }
             }
 
-            // 构建完整的HTML
+            // 构建完整的 HTML
             let fullHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -735,7 +961,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <body>
     ${htmlCode}
     <script>
-        ${finalJsCode}
+        ${allJsCode}
     <\/script>
 </body>
 </html>`;
@@ -750,7 +976,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const fullHtml = generateFullHtml();
             if (!fullHtml) return;
 
-            // 显示iframe，隐藏空状态
+            // 显示 iframe，隐藏空状态
             emptyState.style.display = 'none';
             previewIframe.style.display = 'block';
 
@@ -758,23 +984,29 @@ document.addEventListener('DOMContentLoaded', function() {
             previewIndicator.classList.add('active');
             previewStatus.textContent = '预览已更新';
 
-            // 将HTML写入iframe
+            // 将 HTML 写入 iframe
             previewIframe.srcdoc = fullHtml;
 
             // 显示成功提示
             showSuccess();
         }
 
+        // 格式化当前编辑器代码
+        function formatCurrentEditor() {
+            const editor = editors[currentTab];
+            const code = editor.getValue();
+            const formatted = formatCode(code, currentTab);
+            
+            editor.setValue(formatted);
+            showSuccess();
+        }
+
         // 清空所有编辑器
         function clearEditors() {
             if (confirm('确定要清空所有代码吗？')) {
-                htmlEditor.value = '';
-                cssEditor.value = '';
-                jsEditor.value = '';
-                tsEditor.value = '';
-
-                // 更新行号
-                initLineNumbers();
+                Object.keys(editors).forEach(key => {
+                    editors[key].setValue('');
+                });
 
                 // 重置预览
                 emptyState.style.display = 'block';
@@ -788,6 +1020,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // 绑定事件
         runBtn.addEventListener('click', runPreview);
         clearBtn.addEventListener('click', clearEditors);
+        formatBtn.addEventListener('click', formatCurrentEditor);
 
         // 支持快捷键 Ctrl+Enter 运行预览
         document.addEventListener('keydown', (e) => {
@@ -798,8 +1031,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         // 初始化
-        initLineNumbers();
-        addLineNumberListeners();
+        initEditors();
     </script>
 </body>
 </html>
