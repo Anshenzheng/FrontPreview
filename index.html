@@ -727,7 +727,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const commonOptions = {
                 theme: 'monokai',
                 lineNumbers: true,
-                lineWrapping: false,
+                lineWrapping: true,
                 indentUnit: 4,
                 tabSize: 4,
                 indentWithTabs: false,
@@ -736,6 +736,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 spellcheck: false,
                 autocorrect: false,
                 autocapitalize: false,
+                scrollbarStyle: 'overlay',
+                viewportMargin: Infinity,
                 extraKeys: {
                     'Ctrl-/': 'toggleComment',
                     'Cmd-/': 'toggleComment',
@@ -854,22 +856,67 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // 简单的代码格式化函数
+        // 检测是否为JSON
+        function isJson(code) {
+            try {
+                const trimmed = code.trim();
+                if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                    JSON.parse(trimmed);
+                    return true;
+                }
+            } catch (e) {
+                // 不是有效的JSON
+            }
+            return false;
+        }
+
+        // 格式化JSON
+        function formatJson(code) {
+            try {
+                const parsed = JSON.parse(code.trim());
+                return JSON.stringify(parsed, null, 4);
+            } catch (e) {
+                return code;
+            }
+        }
+
+        // 智能代码格式化
         function formatCode(code, type) {
             if (!code || !code.trim()) return code;
 
+            // 首先检查是否是JSON
+            if (isJson(code)) {
+                return formatJson(code);
+            }
+
+            // 根据不同类型进行格式化
+            if (type === 'css') {
+                return formatCSS(code);
+            } else if (type === 'html') {
+                return formatHTML(code);
+            } else {
+                // JS/TS 使用通用格式化
+                return formatJavaScript(code);
+            }
+        }
+
+        // 格式化CSS
+        function formatCSS(code) {
             let formatted = code;
-
-            // 简单的缩进处理
-            formatted = formatted
-                .replace(/\{/g, '{\n')
-                .replace(/\}/g, '\n}\n')
-                .replace(/;/g, ';\n');
-
-            // 移除多余的空行
-            formatted = formatted.replace(/\n\s*\n\s*\n/g, '\n\n');
-
-            // 简单的缩进
+            
+            // 移除多余的空白
+            formatted = formatted.replace(/\s+/g, ' ');
+            
+            // 在 { 前添加换行
+            formatted = formatted.replace(/\s*\{/g, ' {');
+            
+            // 在 } 后添加换行
+            formatted = formatted.replace(/\}\s*/g, '}\n');
+            
+            // 在 ; 后添加换行
+            formatted = formatted.replace(/;\s*/g, ';\n');
+            
+            // 处理缩进
             let indentLevel = 0;
             const lines = formatted.split('\n');
             const result = [];
@@ -878,8 +925,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 line = line.trim();
                 if (!line) continue;
 
-                if (line.startsWith('}')) {
+                if (line === '}') {
                     indentLevel = Math.max(0, indentLevel - 1);
+                }
+
+                // 处理同一行有多个 } 的情况
+                if (line.includes('}') && !line.includes('{')) {
+                    indentLevel = Math.max(0, indentLevel - (line.match(/\}/g) || []).length);
                 }
 
                 result.push('    '.repeat(indentLevel) + line);
@@ -887,9 +939,142 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (line.endsWith('{')) {
                     indentLevel++;
                 }
+
+                // 处理同一行有多个 { 的情况
+                if (line.includes('{') && !line.includes('}')) {
+                    indentLevel += (line.match(/\{/g) || []).length - (line.endsWith('{') ? 1 : 0);
+                }
             }
 
             return result.join('\n');
+        }
+
+        // 格式化HTML
+        function formatHTML(code) {
+            let formatted = code;
+            
+            // 在标签前后添加换行
+            formatted = formatted.replace(/></g, '>\n<');
+            
+            // 处理缩进
+            let indentLevel = 0;
+            const lines = formatted.split('\n');
+            const result = [];
+            const selfClosingTags = ['br', 'hr', 'img', 'input', 'meta', 'link', 'area', 'base', 'col', 'embed', 'param', 'source', 'track', 'wbr'];
+
+            for (let line of lines) {
+                line = line.trim();
+                if (!line) continue;
+
+                // 检查是否是闭合标签
+                const closingTagMatch = line.match(/^<\/(\w+)/);
+                if (closingTagMatch) {
+                    indentLevel = Math.max(0, indentLevel - 1);
+                }
+
+                // 检查是否是自闭合标签或只有一个标签
+                const isSelfClosing = selfClosingTags.some(tag => new RegExp(`^<${tag}[\\s>]`, 'i').test(line)) || 
+                                       line.includes('/>');
+                
+                // 检查是否同时有开始和结束标签（如 <p>text</p>）
+                const hasBothTags = /<\w+[^>]*>.*<\/\w+>/.test(line);
+
+                if (!isSelfClosing && !hasBothTags) {
+                    // 检查是否是开始标签
+                    const openingTagMatch = line.match(/^<(\w+)/);
+                    if (openingTagMatch && !closingTagMatch) {
+                        result.push('    '.repeat(indentLevel) + line);
+                        indentLevel++;
+                        continue;
+                    }
+                }
+
+                result.push('    '.repeat(indentLevel) + line);
+            }
+
+            return result.join('\n');
+        }
+
+        // 格式化JavaScript/TypeScript
+        function formatJavaScript(code) {
+            let formatted = code;
+            
+            // 先尝试检测JSON对象字面量
+            if (isJsonLikeObject(formatted)) {
+                const jsonFormatted = tryFormatAsJson(formatted);
+                if (jsonFormatted) return jsonFormatted;
+            }
+
+            // 处理大括号
+            formatted = formatted
+                .replace(/\s*\{/g, ' {')
+                .replace(/\}\s*/g, '}\n');
+
+            // 处理分号
+            formatted = formatted.replace(/;\s*/g, ';\n');
+
+            // 处理逗号
+            formatted = formatted.replace(/,\s*/g, ', ');
+
+            // 移除多余的空行
+            formatted = formatted.replace(/\n\s*\n\s*\n/g, '\n\n');
+
+            // 处理缩进
+            let indentLevel = 0;
+            const lines = formatted.split('\n');
+            const result = [];
+
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i].trim();
+                if (!line) continue;
+
+                // 处理同一行有多个 } 的情况
+                const closeBraces = (line.match(/^[\}\]\)]+/) || [''])[0].length;
+                if (closeBraces > 0) {
+                    indentLevel = Math.max(0, indentLevel - closeBraces);
+                }
+
+                // 处理同一行只有 } 的情况
+                if (line === '}' || line === ']' || line === ')') {
+                    result.push('    '.repeat(indentLevel) + line);
+                    continue;
+                }
+
+                result.push('    '.repeat(indentLevel) + line);
+
+                // 计算需要增加的缩进级别
+                const openBraces = (line.match(/[\{\[\(]/g) || []).length;
+                const closeBracesInLine = (line.match(/[\}\]\)]/g) || []).length - closeBraces;
+                
+                indentLevel += openBraces - closeBracesInLine;
+                indentLevel = Math.max(0, indentLevel);
+            }
+
+            return result.join('\n');
+        }
+
+        // 检测是否是类似JSON的对象
+        function isJsonLikeObject(code) {
+            const trimmed = code.trim();
+            return (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+                   (trimmed.startsWith('[') && trimmed.endsWith(']'));
+        }
+
+        // 尝试将代码格式化为JSON
+        function tryFormatAsJson(code) {
+            try {
+                // 尝试将JS对象转换为合法JSON
+                let jsonStr = code.trim();
+                
+                // 移除尾部逗号
+                jsonStr = jsonStr.replace(/,\s*([\}\]])/g, '$1');
+                
+                // 尝试解析
+                const parsed = eval('(' + jsonStr + ')');
+                return JSON.stringify(parsed, null, 4);
+            } catch (e) {
+                return null;
+            }
         }
 
         // 显示错误
