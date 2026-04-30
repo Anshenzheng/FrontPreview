@@ -598,11 +598,185 @@ function parseRepoUrl(url) {
     return null;
 }
 
+const CORS_PROXIES = [
+    (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+];
+
+function extractImageUrls(html, css) {
+    const urls = new Set();
+    
+    const imgRegex = /<img[^>]+src=["']([^"']+)["']/gi;
+    let match;
+    while ((match = imgRegex.exec(html)) !== null) {
+        const url = match[1];
+        if (!url.startsWith('data:') && !url.startsWith('blob:') && url.trim()) {
+            urls.add(url);
+        }
+    }
+    
+    const cssUrlRegex = /url\(["']?([^"')]+)["']?\)/gi;
+    while ((match = cssUrlRegex.exec(css)) !== null) {
+        const url = match[1];
+        if (!url.startsWith('data:') && !url.startsWith('blob:') && url.trim()) {
+            urls.add(url);
+        }
+    }
+    
+    return Array.from(urls);
+}
+
+async function loadImageWithCors(url, useProxy = true) {
+    return new Promise((resolve) => {
+        if (url.startsWith('data:') || url.startsWith('blob:')) {
+            resolve({ success: true, url: url, isDataUrl: true });
+            return;
+        }
+        
+        const tryLoad = (targetUrl, attempt) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            
+            img.onload = () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth || img.width || 100;
+                    canvas.height = img.naturalHeight || img.height || 100;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const dataUrl = canvas.toDataURL('image/png');
+                    resolve({ 
+                        success: true, 
+                        url: dataUrl, 
+                        originalUrl: url,
+                        isDataUrl: true 
+                    });
+                } catch (e) {
+                    if (useProxy && attempt < CORS_PROXIES.length) {
+                        const proxyUrl = CORS_PROXIES[attempt](url);
+                        console.log(`尝试代理 ${attempt + 1}/${CORS_PROXIES.length}: ${proxyUrl.substring(0, 50)}...`);
+                        tryLoad(proxyUrl, attempt + 1);
+                    } else {
+                        resolve({ 
+                            success: false, 
+                            url: url, 
+                            error: e.message 
+                        });
+                    }
+                }
+            };
+            
+            img.onerror = () => {
+                if (useProxy && attempt < CORS_PROXIES.length) {
+                    const proxyUrl = CORS_PROXIES[attempt](url);
+                    console.log(`图片加载失败，尝试代理 ${attempt + 1}/${CORS_PROXIES.length}`);
+                    tryLoad(proxyUrl, attempt + 1);
+                } else {
+                    resolve({ 
+                        success: false, 
+                        url: url, 
+                        error: '图片加载失败' 
+                    });
+                }
+            };
+            
+            img.src = targetUrl;
+        };
+        
+        tryLoad(url, 0);
+    });
+}
+
+async function preloadAndConvertImages(html, css) {
+    const imageUrls = extractImageUrls(html, css);
+    console.log(`发现 ${imageUrls.length} 个图片需要处理`);
+    
+    const results = [];
+    const urlMap = {};
+    
+    for (const url of imageUrls) {
+        console.log(`处理图片: ${url.substring(0, 60)}...`);
+        const result = await loadImageWithCors(url);
+        results.push(result);
+        if (result.success && result.isDataUrl) {
+            urlMap[url] = result.url;
+        }
+    }
+    
+    let processedHtml = html;
+    let processedCss = css;
+    
+    for (const [originalUrl, dataUrl] of Object.entries(urlMap)) {
+        const escapedUrl = originalUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        const imgRegex = new RegExp(`(<img[^>]+src=["'])${escapedUrl}(["'])`, 'gi');
+        processedHtml = processedHtml.replace(imgRegex, `$1${dataUrl}$2`);
+        
+        const cssRegex = new RegExp(`(url\\(["']?)${escapedUrl}(["']?\\))`, 'gi');
+        processedCss = processedCss.replace(cssRegex, `$1${dataUrl}$2`);
+    }
+    
+    const failedImages = results.filter(r => !r.success);
+    
+    return {
+        html: processedHtml,
+        css: processedCss,
+        urlMap,
+        failedImages,
+        totalImages: imageUrls.length,
+        successCount: results.filter(r => r.success).length
+    };
+}
+
+function createImagePlaceholder(url, index) {
+    const shortUrl = url.length > 40 ? url.substring(0, 40) + '...' : url;
+    return `
+        <div style="
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 200px;
+            height: 150px;
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 2px dashed #f59e0b;
+            border-radius: 12px;
+            margin: 8px;
+            padding: 12px;
+            font-family: 'Segoe UI', sans-serif;
+        ">
+            <svg width="48" height="48" fill="none" stroke="#f59e0b" stroke-width="2" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <path d="M21 15l-5-5L5 21"></path>
+            </svg>
+            <div style="
+                font-size: 12px;
+                color: #92400e;
+                margin-top: 8px;
+                text-align: center;
+                word-break: break-all;
+            ">
+                <strong>图片 #${index}</strong><br>
+                ${shortUrl}
+            </div>
+            <div style="
+                font-size: 10px;
+                color: #b45309;
+                margin-top: 4px;
+            ">
+                (跨域图片 - 无法直接加载)
+            </div>
+        </div>
+    `;
+}
+
 async function capturePreviewScreenshot() {
     return new Promise(async (resolve) => {
         try {
-            const htmlCode = editors.html ? editors.html.getValue().trim() : '';
-            const cssCode = editors.css ? editors.css.getValue().trim() : '';
+            let htmlCode = editors.html ? editors.html.getValue().trim() : '';
+            let cssCode = editors.css ? editors.css.getValue().trim() : '';
             const jsCode = editors.js ? editors.js.getValue().trim() : '';
             const tsCode = editors.ts ? editors.ts.getValue().trim() : '';
 
@@ -612,6 +786,17 @@ async function capturePreviewScreenshot() {
                     error: '没有可截图的内容，请先编写代码'
                 });
                 return;
+            }
+
+            console.log('开始预处理图片...');
+            const imageResult = await preloadAndConvertImages(htmlCode, cssCode);
+            htmlCode = imageResult.html;
+            cssCode = imageResult.css;
+            
+            console.log(`图片处理完成: ${imageResult.successCount}/${imageResult.totalImages} 成功`);
+            
+            if (imageResult.failedImages.length > 0) {
+                console.log(`有 ${imageResult.failedImages.length} 个图片加载失败，将使用占位符`);
             }
 
             let allJsCode = '';
@@ -632,7 +817,7 @@ async function capturePreviewScreenshot() {
                 left: -9999px;
                 top: 0;
                 width: 1200px;
-                height: 800px;
+                height: 900px;
                 border: none;
                 z-index: 999999;
             `;
@@ -640,6 +825,45 @@ async function capturePreviewScreenshot() {
             document.body.appendChild(screenshotIframe);
 
             const iframeDoc = screenshotIframe.contentDocument || screenshotIframe.contentWindow.document;
+
+            const failedImagesPlaceholder = imageResult.failedImages.length > 0 
+                ? `
+                    <div style="
+                        background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+                        border-left: 4px solid #f59e0b;
+                        padding: 16px;
+                        margin-bottom: 20px;
+                        border-radius: 0 8px 8px 0;
+                        font-family: 'Segoe UI', sans-serif;
+                    ">
+                        <div style="
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                            margin-bottom: 12px;
+                        ">
+                            <svg width="20" height="20" fill="none" stroke="#f59e0b" stroke-width="2" viewBox="0 0 24 24">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                <line x1="12" y1="9" x2="12" y2="13"></line>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                            <span style="font-weight: 600; color: #92400e; font-size: 14px;">
+                                以下 ${imageResult.failedImages.length} 个图片由于跨域限制无法直接加载：
+                            </span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                            ${imageResult.failedImages.map((img, i) => createImagePlaceholder(img.url, i + 1)).join('')}
+                        </div>
+                        <div style="
+                            margin-top: 12px;
+                            font-size: 12px;
+                            color: #b45309;
+                        ">
+                            💡 提示：如需完整加载跨域图片，请确保图片服务器支持 CORS，或使用 Data URL 格式的图片。
+                        </div>
+                    </div>
+                ` 
+                : '';
 
             const fullHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -664,6 +888,7 @@ async function capturePreviewScreenshot() {
     </style>
 </head>
 <body>
+    ${failedImagesPlaceholder}
     ${htmlCode || '<div style="padding: 40px; text-align: center; color: #666;">暂无 HTML 内容</div>'}
     
     <script>
@@ -702,14 +927,14 @@ async function capturePreviewScreenshot() {
                     }
                 });
                 
-                setTimeout(resolve, 5000);
+                setTimeout(resolve, 10000);
             });
         }
         
         async function captureAndSend() {
             await waitForImages();
             
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 1500));
             
             try {
                 const canvas = await html2canvas(document.body, {
@@ -718,8 +943,11 @@ async function capturePreviewScreenshot() {
                     useCORS: true,
                     allowTaint: true,
                     logging: false,
-                    imageTimeout: 15000,
-                    removeContainer: true
+                    imageTimeout: 20000,
+                    removeContainer: true,
+                    ignoreElements: (element) => {
+                        return false;
+                    }
                 });
                 
                 const dataUrl = canvas.toDataURL('image/png');
@@ -727,7 +955,12 @@ async function capturePreviewScreenshot() {
                 window.parent.postMessage({
                     type: 'screenshot-complete',
                     success: true,
-                    dataUrl: dataUrl
+                    dataUrl: dataUrl,
+                    imageStats: {
+                        total: ${imageResult.totalImages},
+                        success: ${imageResult.successCount},
+                        failed: ${imageResult.failedImages.length}
+                    }
                 }, '*');
             } catch (error) {
                 window.parent.postMessage({
