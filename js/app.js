@@ -599,53 +599,189 @@ function parseRepoUrl(url) {
 }
 
 async function capturePreviewScreenshot() {
-    return new Promise((resolve) => {
-        const iframe = previewIframe;
-        
-        if (iframe.style.display === 'none' || !iframe.srcdoc) {
-            runPreview();
-            setTimeout(async () => {
-                const result = await capturePreviewScreenshot();
-                resolve(result);
-            }, 500);
-            return;
-        }
-
+    return new Promise(async (resolve) => {
         try {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            
-            canvas.width = 800;
-            canvas.height = 600;
-            
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            ctx.strokeStyle = '#e2e8f0';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-            
-            ctx.fillStyle = '#475569';
-            ctx.font = '16px sans-serif';
-            ctx.fillText('预览截图', 20, 40);
-            
-            ctx.fillStyle = '#94a3b8';
-            ctx.font = '12px sans-serif';
-            ctx.fillText('截图时间: ' + new Date().toLocaleString(), 20, 60);
-            ctx.fillText('如需完整截图功能，请部署到支持 html2canvas 的环境', 20, 80);
-            
+            const htmlCode = editors.html ? editors.html.getValue().trim() : '';
+            const cssCode = editors.css ? editors.css.getValue().trim() : '';
+            const jsCode = editors.js ? editors.js.getValue().trim() : '';
+            const tsCode = editors.ts ? editors.ts.getValue().trim() : '';
+
+            if (!htmlCode && !cssCode && !jsCode && !tsCode) {
+                resolve({
+                    success: false,
+                    error: '没有可截图的内容，请先编写代码'
+                });
+                return;
+            }
+
+            const screenshotContainer = document.createElement('div');
+            screenshotContainer.id = 'screenshot-container';
+            screenshotContainer.style.cssText = `
+                position: fixed;
+                left: -9999px;
+                top: 0;
+                width: 1200px;
+                min-height: 800px;
+                background: #ffffff;
+                padding: 20px;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                z-index: 999999;
+                overflow: visible;
+            `;
+
+            if (cssCode) {
+                const styleElement = document.createElement('style');
+                styleElement.textContent = `
+                    #screenshot-container * {
+                        box-sizing: border-box;
+                    }
+                    ${cssCode}
+                `;
+                screenshotContainer.appendChild(styleElement);
+            }
+
+            const contentWrapper = document.createElement('div');
+            contentWrapper.id = 'screenshot-content';
+            contentWrapper.innerHTML = htmlCode || '<div style="padding: 40px; text-align: center; color: #666;">暂无 HTML 内容</div>';
+            screenshotContainer.appendChild(contentWrapper);
+
+            document.body.appendChild(screenshotContainer);
+
+            await new Promise(resolve => setTimeout(resolve, 200));
+
+            const canvas = await html2canvas(screenshotContainer, {
+                backgroundColor: '#ffffff',
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                logging: false
+            });
+
+            document.body.removeChild(screenshotContainer);
+
             const dataUrl = canvas.toDataURL('image/png');
             const base64 = dataUrl.split(',')[1];
+
             resolve({
                 success: true,
                 base64: base64,
                 dataUrl: dataUrl
             });
+
         } catch (error) {
-            resolve({
-                success: false,
-                error: error.message
-            });
+            console.error('截图失败:', error);
+            
+            try {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                canvas.width = 800;
+                canvas.height = 600;
+                
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = '#f8fafc';
+                ctx.fillRect(0, 0, canvas.width, 60);
+                
+                ctx.fillStyle = '#475569';
+                ctx.font = 'bold 20px sans-serif';
+                ctx.fillText('代码预览', 30, 40);
+                
+                ctx.fillStyle = '#64748b';
+                ctx.font = '12px sans-serif';
+                ctx.fillText('截图时间: ' + new Date().toLocaleString(), 30, 80);
+                
+                const htmlCode = editors.html ? editors.html.getValue().trim() : '';
+                const cssCode = editors.css ? editors.css.getValue().trim() : '';
+                const jsCode = editors.js ? editors.js.getValue().trim() : '';
+                const tsCode = editors.ts ? editors.ts.getValue().trim() : '';
+                
+                let y = 120;
+                ctx.font = '14px monospace';
+                
+                if (htmlCode) {
+                    ctx.fillStyle = '#7c3aed';
+                    ctx.font = 'bold 14px sans-serif';
+                    ctx.fillText('📄 HTML 代码:', 30, y);
+                    y += 25;
+                    
+                    ctx.fillStyle = '#374151';
+                    ctx.font = '12px monospace';
+                    const htmlLines = htmlCode.split('\n').slice(0, 10);
+                    for (const line of htmlLines) {
+                        if (y > 550) {
+                            ctx.fillStyle = '#9ca3af';
+                            ctx.fillText('... (更多内容已省略)', 30, y);
+                            break;
+                        }
+                        ctx.fillText(line.substring(0, 80), 50, y);
+                        y += 20;
+                    }
+                    y += 10;
+                }
+                
+                if (cssCode) {
+                    ctx.fillStyle = '#ec4899';
+                    ctx.font = 'bold 14px sans-serif';
+                    ctx.fillText('🎨 CSS 代码:', 30, y);
+                    y += 25;
+                    
+                    ctx.fillStyle = '#374151';
+                    ctx.font = '12px monospace';
+                    const cssLines = cssCode.split('\n').slice(0, 5);
+                    for (const line of cssLines) {
+                        if (y > 550) {
+                            ctx.fillStyle = '#9ca3af';
+                            ctx.fillText('... (更多内容已省略)', 30, y);
+                            break;
+                        }
+                        ctx.fillText(line.substring(0, 80), 50, y);
+                        y += 20;
+                    }
+                    y += 10;
+                }
+                
+                if (jsCode || tsCode) {
+                    ctx.fillStyle = '#0ea5e9';
+                    ctx.font = 'bold 14px sans-serif';
+                    ctx.fillText('⚡ JavaScript/TypeScript 代码:', 30, y);
+                    y += 25;
+                    
+                    ctx.fillStyle = '#374151';
+                    ctx.font = '12px monospace';
+                    const codeLines = (jsCode || tsCode).split('\n').slice(0, 5);
+                    for (const line of codeLines) {
+                        if (y > 550) {
+                            ctx.fillStyle = '#9ca3af';
+                            ctx.fillText('... (更多内容已省略)', 30, y);
+                            break;
+                        }
+                        ctx.fillText(line.substring(0, 80), 50, y);
+                        y += 20;
+                    }
+                }
+                
+                ctx.fillStyle = '#e2e8f0';
+                ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '11px sans-serif';
+                ctx.fillText('前端代码预览工具 - 代码摘要截图', 30, canvas.height - 15);
+                
+                const dataUrl = canvas.toDataURL('image/png');
+                const base64 = dataUrl.split(',')[1];
+                
+                resolve({
+                    success: true,
+                    base64: base64,
+                    dataUrl: dataUrl
+                });
+            } catch (fallbackError) {
+                resolve({
+                    success: false,
+                    error: error.message
+                });
+            }
         }
     });
 }
