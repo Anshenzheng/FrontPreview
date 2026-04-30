@@ -614,176 +614,337 @@ async function capturePreviewScreenshot() {
                 return;
             }
 
-            const screenshotContainer = document.createElement('div');
-            screenshotContainer.id = 'screenshot-container';
-            screenshotContainer.style.cssText = `
+            let allJsCode = '';
+            if (jsCode) {
+                allJsCode += jsCode + '\n';
+            }
+            if (tsCode) {
+                const compileResult = compileTypeScript(tsCode);
+                if (compileResult.success) {
+                    allJsCode += compileResult.jsCode + '\n';
+                }
+            }
+
+            const screenshotIframe = document.createElement('iframe');
+            screenshotIframe.id = 'screenshot-iframe';
+            screenshotIframe.style.cssText = `
                 position: fixed;
                 left: -9999px;
                 top: 0;
                 width: 1200px;
-                min-height: 800px;
-                background: #ffffff;
-                padding: 20px;
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                height: 800px;
+                border: none;
                 z-index: 999999;
-                overflow: visible;
             `;
 
-            if (cssCode) {
-                const styleElement = document.createElement('style');
-                styleElement.textContent = `
-                    #screenshot-container * {
-                        box-sizing: border-box;
+            document.body.appendChild(screenshotIframe);
+
+            const iframeDoc = screenshotIframe.contentDocument || screenshotIframe.contentWindow.document;
+
+            const fullHtml = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>截图预览</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #ffffff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        ${cssCode}
+    </style>
+</head>
+<body>
+    ${htmlCode || '<div style="padding: 40px; text-align: center; color: #666;">暂无 HTML 内容</div>'}
+    
+    <script>
+        ${allJsCode}
+        
+        function waitForImages() {
+            return new Promise((resolve) => {
+                const images = document.querySelectorAll('img');
+                if (images.length === 0) {
+                    resolve();
+                    return;
+                }
+                
+                let loadedCount = 0;
+                const totalImages = images.length;
+                
+                images.forEach((img) => {
+                    if (img.complete) {
+                        loadedCount++;
+                        if (loadedCount === totalImages) {
+                            resolve();
+                        }
+                    } else {
+                        img.addEventListener('load', () => {
+                            loadedCount++;
+                            if (loadedCount === totalImages) {
+                                resolve();
+                            }
+                        });
+                        img.addEventListener('error', () => {
+                            loadedCount++;
+                            if (loadedCount === totalImages) {
+                                resolve();
+                            }
+                        });
                     }
-                    ${cssCode}
-                `;
-                screenshotContainer.appendChild(styleElement);
+                });
+                
+                setTimeout(resolve, 5000);
+            });
+        }
+        
+        async function captureAndSend() {
+            await waitForImages();
+            
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            try {
+                const canvas = await html2canvas(document.body, {
+                    backgroundColor: '#ffffff',
+                    scale: 2,
+                    useCORS: true,
+                    allowTaint: true,
+                    logging: false,
+                    imageTimeout: 15000,
+                    removeContainer: true
+                });
+                
+                const dataUrl = canvas.toDataURL('image/png');
+                
+                window.parent.postMessage({
+                    type: 'screenshot-complete',
+                    success: true,
+                    dataUrl: dataUrl
+                }, '*');
+            } catch (error) {
+                window.parent.postMessage({
+                    type: 'screenshot-complete',
+                    success: false,
+                    error: error.message
+                }, '*');
             }
+        }
+        
+        if (document.readyState === 'complete') {
+            captureAndSend();
+        } else {
+            window.addEventListener('load', captureAndSend);
+        }
+    <\/script>
+</body>
+</html>`;
 
-            const contentWrapper = document.createElement('div');
-            contentWrapper.id = 'screenshot-content';
-            contentWrapper.innerHTML = htmlCode || '<div style="padding: 40px; text-align: center; color: #666;">暂无 HTML 内容</div>';
-            screenshotContainer.appendChild(contentWrapper);
+            iframeDoc.open();
+            iframeDoc.write(fullHtml);
+            iframeDoc.close();
 
-            document.body.appendChild(screenshotContainer);
+            let messageReceived = false;
+            let timeoutId = null;
 
-            await new Promise(resolve => setTimeout(resolve, 200));
+            const messageHandler = (event) => {
+                if (event.data && event.data.type === 'screenshot-complete') {
+                    messageReceived = true;
+                    window.removeEventListener('message', messageHandler);
+                    
+                    if (timeoutId) {
+                        clearTimeout(timeoutId);
+                    }
 
-            const canvas = await html2canvas(screenshotContainer, {
-                backgroundColor: '#ffffff',
-                scale: 2,
-                useCORS: true,
-                allowTaint: true,
-                logging: false
-            });
+                    try {
+                        if (document.body.contains(screenshotIframe)) {
+                            document.body.removeChild(screenshotIframe);
+                        }
+                    } catch (e) {}
 
-            document.body.removeChild(screenshotContainer);
+                    if (event.data.success) {
+                        const base64 = event.data.dataUrl.split(',')[1];
+                        resolve({
+                            success: true,
+                            base64: base64,
+                            dataUrl: event.data.dataUrl
+                        });
+                    } else {
+                        console.error('iframe 内截图失败:', event.data.error);
+                        createFallbackScreenshot(resolve, htmlCode, cssCode, jsCode, tsCode);
+                    }
+                }
+            };
 
-            const dataUrl = canvas.toDataURL('image/png');
-            const base64 = dataUrl.split(',')[1];
+            window.addEventListener('message', messageHandler);
 
-            resolve({
-                success: true,
-                base64: base64,
-                dataUrl: dataUrl
-            });
+            timeoutId = setTimeout(() => {
+                if (!messageReceived) {
+                    console.warn('截图超时，使用备用方案');
+                    window.removeEventListener('message', messageHandler);
+                    
+                    try {
+                        if (document.body.contains(screenshotIframe)) {
+                            document.body.removeChild(screenshotIframe);
+                        }
+                    } catch (e) {}
+                    
+                    createFallbackScreenshot(resolve, htmlCode, cssCode, jsCode, tsCode);
+                }
+            }, 15000);
 
         } catch (error) {
             console.error('截图失败:', error);
-            
-            try {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                
-                canvas.width = 800;
-                canvas.height = 600;
-                
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
-                ctx.fillStyle = '#f8fafc';
-                ctx.fillRect(0, 0, canvas.width, 60);
-                
-                ctx.fillStyle = '#475569';
-                ctx.font = 'bold 20px sans-serif';
-                ctx.fillText('代码预览', 30, 40);
-                
-                ctx.fillStyle = '#64748b';
-                ctx.font = '12px sans-serif';
-                ctx.fillText('截图时间: ' + new Date().toLocaleString(), 30, 80);
-                
-                const htmlCode = editors.html ? editors.html.getValue().trim() : '';
-                const cssCode = editors.css ? editors.css.getValue().trim() : '';
-                const jsCode = editors.js ? editors.js.getValue().trim() : '';
-                const tsCode = editors.ts ? editors.ts.getValue().trim() : '';
-                
-                let y = 120;
-                ctx.font = '14px monospace';
-                
-                if (htmlCode) {
-                    ctx.fillStyle = '#7c3aed';
-                    ctx.font = 'bold 14px sans-serif';
-                    ctx.fillText('📄 HTML 代码:', 30, y);
-                    y += 25;
-                    
-                    ctx.fillStyle = '#374151';
-                    ctx.font = '12px monospace';
-                    const htmlLines = htmlCode.split('\n').slice(0, 10);
-                    for (const line of htmlLines) {
-                        if (y > 550) {
-                            ctx.fillStyle = '#9ca3af';
-                            ctx.fillText('... (更多内容已省略)', 30, y);
-                            break;
-                        }
-                        ctx.fillText(line.substring(0, 80), 50, y);
-                        y += 20;
-                    }
-                    y += 10;
-                }
-                
-                if (cssCode) {
-                    ctx.fillStyle = '#ec4899';
-                    ctx.font = 'bold 14px sans-serif';
-                    ctx.fillText('🎨 CSS 代码:', 30, y);
-                    y += 25;
-                    
-                    ctx.fillStyle = '#374151';
-                    ctx.font = '12px monospace';
-                    const cssLines = cssCode.split('\n').slice(0, 5);
-                    for (const line of cssLines) {
-                        if (y > 550) {
-                            ctx.fillStyle = '#9ca3af';
-                            ctx.fillText('... (更多内容已省略)', 30, y);
-                            break;
-                        }
-                        ctx.fillText(line.substring(0, 80), 50, y);
-                        y += 20;
-                    }
-                    y += 10;
-                }
-                
-                if (jsCode || tsCode) {
-                    ctx.fillStyle = '#0ea5e9';
-                    ctx.font = 'bold 14px sans-serif';
-                    ctx.fillText('⚡ JavaScript/TypeScript 代码:', 30, y);
-                    y += 25;
-                    
-                    ctx.fillStyle = '#374151';
-                    ctx.font = '12px monospace';
-                    const codeLines = (jsCode || tsCode).split('\n').slice(0, 5);
-                    for (const line of codeLines) {
-                        if (y > 550) {
-                            ctx.fillStyle = '#9ca3af';
-                            ctx.fillText('... (更多内容已省略)', 30, y);
-                            break;
-                        }
-                        ctx.fillText(line.substring(0, 80), 50, y);
-                        y += 20;
-                    }
-                }
-                
-                ctx.fillStyle = '#e2e8f0';
-                ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
-                ctx.fillStyle = '#94a3b8';
-                ctx.font = '11px sans-serif';
-                ctx.fillText('前端代码预览工具 - 代码摘要截图', 30, canvas.height - 15);
-                
-                const dataUrl = canvas.toDataURL('image/png');
-                const base64 = dataUrl.split(',')[1];
-                
-                resolve({
-                    success: true,
-                    base64: base64,
-                    dataUrl: dataUrl
-                });
-            } catch (fallbackError) {
-                resolve({
-                    success: false,
-                    error: error.message
-                });
-            }
+            const htmlCode = editors.html ? editors.html.getValue().trim() : '';
+            const cssCode = editors.css ? editors.css.getValue().trim() : '';
+            const jsCode = editors.js ? editors.js.getValue().trim() : '';
+            const tsCode = editors.ts ? editors.ts.getValue().trim() : '';
+            createFallbackScreenshot(resolve, htmlCode, cssCode, jsCode, tsCode);
         }
     });
+}
+
+function createFallbackScreenshot(resolve, htmlCode, cssCode, jsCode, tsCode) {
+    try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        const maxWidth = 1200;
+        const baseHeight = 200;
+        const lineHeight = 20;
+        const padding = 40;
+        
+        let contentHeight = 0;
+        
+        if (htmlCode) {
+            const lines = htmlCode.split('\n').slice(0, 15);
+            contentHeight += 50 + lines.length * lineHeight;
+        }
+        
+        if (cssCode) {
+            const lines = cssCode.split('\n').slice(0, 8);
+            contentHeight += 50 + lines.length * lineHeight;
+        }
+        
+        if (jsCode || tsCode) {
+            const lines = (jsCode || tsCode).split('\n').slice(0, 8);
+            contentHeight += 50 + lines.length * lineHeight;
+        }
+        
+        const canvasHeight = Math.max(baseHeight + contentHeight, 600);
+        
+        canvas.width = maxWidth;
+        canvas.height = canvasHeight;
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(0, 0, canvas.width, 80);
+        
+        ctx.fillStyle = '#1e293b';
+        ctx.font = 'bold 28px "Segoe UI", sans-serif';
+        ctx.fillText('📸 代码预览截图', padding, 50);
+        
+        ctx.fillStyle = '#64748b';
+        ctx.font = '14px "Segoe UI", sans-serif';
+        ctx.fillText('生成时间: ' + new Date().toLocaleString(), padding, 75);
+        
+        let y = 100;
+        
+        if (htmlCode) {
+            y = drawCodeSection(ctx, '📄 HTML 代码', htmlCode, '#7c3aed', padding, y, maxWidth - padding * 2, 15);
+            y += 20;
+        }
+        
+        if (cssCode) {
+            y = drawCodeSection(ctx, '🎨 CSS 代码', cssCode, '#ec4899', padding, y, maxWidth - padding * 2, 8);
+            y += 20;
+        }
+        
+        if (jsCode || tsCode) {
+            y = drawCodeSection(ctx, '⚡ JavaScript/TypeScript 代码', jsCode || tsCode, '#0ea5e9', padding, y, maxWidth - padding * 2, 8);
+        }
+        
+        ctx.fillStyle = '#f1f5f9';
+        ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '13px "Segoe UI", sans-serif';
+        ctx.fillText('💡 提示：此为代码摘要截图。如需包含动态效果（弹窗、动画等）的完整截图，请确保 JavaScript 代码在页面加载时自动执行。', padding, canvas.height - 35);
+        
+        const dataUrl = canvas.toDataURL('image/png');
+        const base64 = dataUrl.split(',')[1];
+        
+        resolve({
+            success: true,
+            base64: base64,
+            dataUrl: dataUrl
+        });
+    } catch (fallbackError) {
+        console.error('备用截图方案也失败:', fallbackError);
+        resolve({
+            success: false,
+            error: fallbackError.message
+        });
+    }
+}
+
+function drawCodeSection(ctx, title, code, color, x, y, maxWidth, maxLines) {
+    const padding = 15;
+    const lineHeight = 18;
+    const lines = code.split('\n').slice(0, maxLines);
+    const hasMore = code.split('\n').length > maxLines;
+    
+    const sectionHeight = 40 + lines.length * lineHeight + (hasMore ? 25 : 0);
+    
+    ctx.fillStyle = '#f8fafc';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    roundRect(ctx, x, y, maxWidth, sectionHeight, 8);
+    ctx.fill();
+    ctx.stroke();
+    
+    ctx.fillStyle = color;
+    ctx.font = 'bold 16px "Segoe UI", sans-serif';
+    ctx.fillText(title, x + padding, y + 28);
+    
+    ctx.fillStyle = '#374151';
+    ctx.font = '13px "Consolas", "Monaco", monospace';
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const displayLine = line.length > 100 ? line.substring(0, 100) + '...' : line;
+        ctx.fillText(displayLine, x + padding, y + 50 + i * lineHeight);
+    }
+    
+    if (hasMore) {
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = '12px "Segoe UI", sans-serif';
+        ctx.fillText(`... 还有 ${code.split('\n').length - maxLines} 行代码已省略`, x + padding, y + sectionHeight - 15);
+    }
+    
+    return y + sectionHeight;
+}
+
+function roundRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
 }
 
 async function getRepoInfo(owner, repo, token) {
