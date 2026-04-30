@@ -67,35 +67,52 @@
             height: 24px;
         }
 
-        .main-container {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            padding: 0.75rem;
-            gap: 0.75rem;
-            min-height: 0;
-            overflow: hidden;
-        }
+      .main-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem;
+    gap: 0.75rem;
+    min-height: 0; 
+    min-width: 0; /* 新增：防止主容器被长文本撑宽 */
+    overflow: hidden;
+}
 
-        .content {
-            display: flex;
-            flex: 1;
-            gap: 0.75rem;
-            min-height: 0;
-            overflow: hidden;
-        }
+.content {
+    display: flex;
+    flex: 1;
+    gap: 0.75rem;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+}
 
-        .editor-panel {
-            flex: 1;
-            background: rgba(30, 30, 46, 0.95);
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            min-height: 0;
-        }
+    .editor-panel {
+    flex: 1;
+    background: rgba(30, 30, 46, 0.95);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* 必须为 hidden */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-width: 0; /* 强制允许收缩到 0 */
+    position: relative; /* 为内部绝对定位元素提供参考 */
+}
+
+/* --- 核心修复：强制 CodeMirror 容器受限 --- */
+.editor-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    display: none;
+    min-height: 0;
+    min-width: 0; /* 新增 */
+}
+
+.editor-container.active {
+    display: flex;
+    flex-direction: column;
+}
 
         .tabs {
             display: flex;
@@ -145,27 +162,26 @@
             background: linear-gradient(90deg, #7c3aed, #ec4899);
         }
 
-        .editor-container {
-            flex: 1;
-            position: relative;
-            overflow: hidden;
-            display: none;
-            min-height: 0;
-        }
-
-        .editor-container.active {
-            display: block;
-            min-height: 0;
-            overflow: hidden;
-        }
+ 
 
         /* CodeMirror 自定义样式 */
-        .CodeMirror {
-            height: 100% !important;
-            font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
-            font-size: 14px;
-            line-height: 1.6;
-        }
+  .CodeMirror {
+    flex: 1;
+    height: 100% !important; /* 修改：从 auto 改为 100% */
+    width: 100% !important;
+    position: absolute; /* 关键：绝对定位能完美解决 Flex 撑开问题 */
+    top: 0;
+    left: 0;
+    font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* 确保 CodeMirror 的滚动条容器正确 */
+.CodeMirror-scroll {
+    height: 100%;
+    overflow-x: auto !important; /* 强制显示横向滚动条 */
+}
 
         .CodeMirror-gutters {
             background: #1e1e2e;
@@ -741,6 +757,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 autocorrect: false,
                 autocapitalize: false,
                 viewportMargin: 10,
+lineWrapping: false,
+viewportMargin: Infinity,
                 extraKeys: {
                     'Ctrl-/': 'toggleComment',
                     'Cmd-/': 'toggleComment',
@@ -832,6 +850,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     const cursor = editors[targetTab].getCursor();
                     cursorPosition.textContent = `行 ${cursor.line + 1}, 列 ${cursor.ch + 1}`;
                 }
+
+setTimeout(() => {
+            if (editors[currentTab]) {
+                editors[currentTab].refresh();
+            }
+        }, 1);
+
+requestAnimationFrame(() => {
+            if (editors[currentTab]) {
+                editors[currentTab].refresh();
+            }
+        });
             });
         });
 
