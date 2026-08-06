@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jira Control Task Weekly Report</title>
+    <!-- 引入依赖库 -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background: #f5f7fa;
+            padding: 24px;
+            color: #1f2937;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            color: #111827;
+        }
+        .subtitle {
+            color: #6b7280;
+            margin-bottom: 24px;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 12px;
+        }
+        /* 控制区样式 */
+        .control-panel {
+            background: #fff;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+        }
+        .control-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .control-item label {
+            font-size: 12px;
+            color: #6b7280;
+            font-weight: 500;
+        }
+        .control-item input, .control-item select {
+            padding: 6px 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .btn {
+            padding: 8px 16px;
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .btn:hover {
+            background: #1d4ed8;
+        }
+        /* KPI卡片样式 */
+        .kpi-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+            margin-bottom: 30px;
+        }
+        .kpi-card {
+            background: #fff;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .kpi-card h3 {
+            font-size: 14px;
+            color: #6b7280;
+            font-weight: 500;
+        }
+        .kpi-card .num {
+            font-size: 28px;
+            font-weight: 700;
+            margin-top: 6px;
+        }
+        /* 区块标题 */
+        .section-title {
+            font-size: 18px;
+            margin: 36px 0 16px;
+            padding-left: 12px;
+            border-left: 4px solid #2563eb;
+            font-weight: 600;
+        }
+        /* 图表容器 */
+        .chart-wrap {
+            background: #fff;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+        }
+        .chart-title {
+            font-size: 16px;
+            margin-bottom: 12px;
+            font-weight: 600;
+            color: #111827;
+        }
+        .chart {
+            width: 100%;
+            height: 400px;
+        }
+        .desc {
+            font-size: 13px;
+            color: #6b7280;
+            margin-top: 8px;
+            line-height: 1.5;
+        }
+        /* 表格样式 */
+        .table-wrap {
+            background: #fff;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        th, td {
+            padding: 12px 8px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+        }
+        tr:hover {
+            background: #f9fafb;
+        }
+        .status-tag {
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status-open {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+        .status-inprogress {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+        .status-done {
+            background: #dcfce7;
+            color: #166534;
+        }
+        .overdue-tag {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+    </style>
+</head>
+<body>
+    <h1>Jira Control Task Weekly Report</h1>
+    <div class="subtitle">Report Generated Time: <span id="reportDate"></span> | Support Custom CSV Upload | Switch Statistics Dimension</div>
+
+    <!-- Control Panel -->
+    <div class="control-panel">
+        <div class="control-item">
+            <label>Upload CSV File</label>
+            <input type="file" id="csvFile" accept=".csv">
+        </div>
+        <div class="control-item">
+            <label>Status Stat Mode</label>
+            <select id="statusMode">
+                <option value="split">Split (Open/In Progress/Done)</option>
+                <option value="merged">Merge (Undone/Done)</option>
+            </select>
+        </div>
+        <div class="control-item">
+            <label>Top N Longest Undone Tasks</label>
+            <input type="number" id="topN" value="10" min="1" max="50" style="width: 80px;">
+        </div>
+        <div class="control-item">
+            <label>Report Base Date (For Overdue Judge)</label>
+            <input type="date" id="baseDate">
+        </div>
+        <button class="btn" id="loadSample">Load Sample Data</button>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-row" id="kpiPanel"></div>
+
+    <!-- Core Distribution Analysis -->
+    <div class="section-title">1. Core Dimension Task Distribution Analysis</div>
+    <div class="chart-wrap">
+        <div class="chart-title">Task Distribution by Control Issue</div>
+        <div class="chart" id="chartControl"></div>
+        <div class="desc">View task progress of each internal control domain to identify lagging control items</div>
+    </div>
+    <div class="chart-wrap">
+        <div class="chart-title">Task Distribution by Application</div>
+        <div class="chart" id="chartApp"></div>
+        <div class="desc">Check workload and progress of each business system/region</div>
+    </div>
+    <div class="chart-wrap">
+        <div class="chart-title">Task Distribution by Assignee</div>
+        <div class="chart" id="chartAssignee"></div>
+        <div class="desc">Review team member workload allocation and completion status</div>
+    </div>
+
+    <!-- Top N Longest Undone Tasks -->
+    <div class="section-title">2. Top N Longest Pending Undone Tasks</div>
+    <div class="chart-wrap">
+        <div class="chart-title">Top <span id="topNTitle">10</span> Undone Tasks by Aging Days (Color Coded by Application)</div>
+        <div class="chart" id="chartTopN"></div>
+        <div class="desc">Identify high-risk tasks created earliest and still unfinished; Y-axis shows Jira# & Assignee; Color represents Application</div>
+    </div>
+    <div class="table-wrap">
+        <div class="chart-title">Top <span id="topNTableTitle">10</span> Undone Task Details</div>
+        <table id="topNTable">
+            <thead>
+                <tr>
+                    <th>Jira#</th>
+                    <th>Assignee</th>
+                    <th>Application</th>
+                    <th>Summary</th>
+                    <th>Control Issue</th>
+                    <th>Status</th>
+                    <th>Create Date</th>
+                    <th>Aging Days</th>
+                    <th>Due Date</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <!-- Overdue Task Analysis -->
+    <div class="section-title">3. Overdue Task Special Analysis</div>
+    <div class="chart-wrap">
+        <div class="chart-title">Overdue Tasks by Application</div>
+        <div class="chart" id="chartOverdueApp"></div>
+        <div class="desc">Locate business systems/regions with most overdue tasks</div>
+    </div>
+    <div class="chart-wrap">
+        <div class="chart-title">Overdue Tasks by Assignee</div>
+        <div class="chart" id="chartOverdueAssignee"></div>
+        <div class="desc">Identify team members with highest overdue volume</div>
+    </div>
+    <div class="chart-wrap">
+        <div class="chart-title">Overdue Tasks by Control Issue</div>
+        <div class="chart" id="chartOverdueControl"></div>
+        <div class="desc">Find internal control domains with most overdue items</div>
+    </div>
+    <div class="table-wrap">
+        <div class="chart-title">Overdue Task List</div>
+        <table id="overdueTable">
+            <thead>
+                <tr>
+                    <th>Jira#</th>
+                    <th>Assignee</th>
+                    <th>Application</th>
+                    <th>Summary</th>
+                    <th>Control Issue</th>
+                    <th>Status</th>
+                    <th>Create Date</th>
+                    <th>Due Date</th>
+                    <th>Overdue Days</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        // ===================== Global Config =====================
+        const colorMap = {
+            "Open": "#8c8c8c",
+            "In Progress": "#1890ff",
+            "Done": "#52c41a",
+            "Undone": "#fa8c16"
+        };
+        // Dynamic color pool for Application mapping
+        const appColorPool = [
+            '#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#3ba272','#fc8452','#9a60b4','#ea7ccc',
+            '#2f4554','#c23531','#61a0a8','#d48265','#91c7ae','#749f83','#ca8622','#bda29a'
+        ];
+        let appColorDict = {};
+
+        const statusSplitOrder = ["Open", "In Progress", "Done"];
+        const statusMergedOrder = ["Undone", "Done"];
+        
+        let chartControl, chartApp, chartAssignee, chartTopN;
+        let chartOverdueApp, chartOverdueAssignee, chartOverdueControl;
+
+        let rawData = [];
+        let reportDate = new Date();
+        reportDate.setHours(0,0,0,0);
+
+        // ===================== Date Utils【支持 yyyy-MM-dd、yyyy/mm/dd、MM/DD/YYYY】 =====================
+        function parseDate(dateStr) {
+            if (!dateStr || typeof dateStr !== 'string') return null;
+            let raw = dateStr.trim().replace(/[\u200B-\u200D\uFEFF]/g, '');
+            if (raw === '') return null;
+
+            // 1.优先匹配 yyyy[-/]MM[-/]dd
+            const regYMD = /^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/;
+            let match = raw.match(regYMD);
+            if (match) {
+                const y = +match[1];
+                const m = +match[2] - 1;
+                const d = +match[3];
+                return new Date(y, m, d);
+            }
+
+            // 2.匹配美式 MM/DD/YYYY
+            const regMDY = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+            match = raw.match(regMDY);
+            if (match) {
+                const m = +match[1] - 1;
+                const d = +match[2];
+                const y = +match[3];
+                return new Date(y, m, d);
+            }
+
+            // 3.兜底方案，还原最初逻辑，最大限度兼容旧数据
+            const fallback = new Date(raw.replace(/\//g, '-'));
+            if (!isNaN(fallback.getTime())) {
+                return fallback;
+            }
+            return null;
+        }
+
+        function getDaysDiff(startDate, endDate) {
+            if (!startDate || !endDate) return 0;
+            // 抹除时分秒，只计算自然日差值，避免时区、小时偏差
+            const s = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+            const e = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+            const msPerDay = 24 * 60 * 60 * 1000;
+            return Math.round((e - s) / msPerDay);
+        }
+
+        // Assign unique color for each application
+        function getAppColor(appName) {
+            if (!appColorDict[appName]) {
+                const idx = Object.keys(appColorDict).length % appColorPool.length;
+                appColorDict[appName] = appColorPool[idx];
+            }
+            return appColorDict[appName];
+        }
+
+        // ===================== CSV Parse =====================
+        function loadCSV(file) {
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    // 清洗表头与行key，消除字段前后空格导致无法读取
+                    results.meta.fields = results.meta.fields.map(f => f.trim());
+                    results.data = results.data.map(row => {
+                        const cleanedRow = {};
+                        for (const key in row) {
+                            cleanedRow[key.trim()] = row[key];
+                        }
+                        return cleanedRow;
+                    });
+
+                    const requiredCols = ["Jira#", "Summary", "assignee", "application", "Control Issue", "Status", "create date", "due date"];
+                    const missingCols = requiredCols.filter(col => !results.meta.fields.includes(col));
+                    if (missingCols.length > 0) {
+                        alert(`CSV missing columns: ${missingCols.join(', ')}`);
+                        return;
+                    }
+                    rawData = results.data.map(row => {
+                        const createDate = parseDate(row["create date"]);
+                        const dueDate = parseDate(row["due date"]);
+                        const status = row["Status"].trim();
+                        return {
+                            jira: row["Jira#"].trim(),
+                            summary: row["Summary"].trim(),
+                            assignee: row["assignee"].trim(),
+                            app: row["application"].trim(),
+                            control: row["Control Issue"].trim(),
+                            status: status,
+                            createDate: createDate,
+                            dueDate: dueDate,
+                            agingDays: getDaysDiff(createDate, reportDate),
+                            isOverdue: dueDate < reportDate && status !== "Done"
+                        };
+                    });
+                    appColorDict = {};
+                    renderAll();
+                }
+            });
+        }
+
+        // ===================== Sample Data =====================
+        function loadSampleData() {
+            const sampleText = `Jira#,Summary,assignee,application,Control Issue,Status,create date,due date
+`;
+
+            Papa.parse(sampleText, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    results.meta.fields = results.meta.fields.map(f => f.trim());
+                    results.data = results.data.map(row => {
+                        const cleanedRow = {};
+                        for (const key in row) {
+                            cleanedRow[key.trim()] = row[key];
+                        }
+                        return cleanedRow;
+                    });
+
+                    rawData = results.data.map(row => {
+                        const createDate = parseDate(row["create date"]);
+                        const dueDate = parseDate(row["due date"]);
+                        const status = row["Status"].trim();
+                        return {
+                            jira: row["Jira#"].trim(),
+                            summary: row["Summary"].trim(),
+                            assignee: row["assignee"].trim(),
+                            app: row["application"].trim(),
+                            control: row["Control Issue"].trim(),
+                            status: status,
+                            createDate: createDate,
+                            dueDate: dueDate,
+                            agingDays: getDaysDiff(createDate, reportDate),
+                            isOverdue: dueDate < reportDate && status !== "Done"
+                        };
+                    });
+                    appColorDict = {};
+                    renderAll();
+                }
+            });
+        }
+
+        // ===================== Pivot Builder =====================
+        function buildPivot(dimKey, statusMode) {
+            const groups = {};
+            const statusOrder = statusMode === "split" ? statusSplitOrder : statusMergedOrder;
+            
+            rawData.forEach(item => {
+                const g = item[dimKey];
+                if (!groups[g]) {
+                    groups[g] = {};
+                    statusOrder.forEach(s => groups[g][s] = 0);
+                }
+                if (statusMode === "merged") {
+                    if (item.status === "Done") groups[g]["Done"] += 1;
+                    else groups[g]["Undone"] += 1;
+                } else {
+                    const st = item.status;
+                    if(statusOrder.includes(st)) groups[g][st] += 1;
+                }
+            });
+            
+            const names = Object.keys(groups);
+            const series = statusOrder.map(s => ({
+                name: s,
+                type: 'bar',
+                stack: 'total',
+                data: names.map(n => groups[n][s]),
+                itemStyle: { color: colorMap[s] }
+            }));
+            return { names, series, statusOrder };
+        }
+
+        // ===================== Global Render =====================
+        function renderAll() {
+            renderKPI();
+            renderCoreCharts();
+            renderTopN();
+            renderOverdueAnalysis();
+        }
+
+        function renderKPI() {
+            const total = rawData.length;
+            const doneCnt = rawData.filter(d => d.status === "Done").length;
+            const inProgressCnt = rawData.filter(d => d.status === "In Progress").length;
+            const openCnt = rawData.filter(d => d.status === "Open").length;
+            const overdueCnt = rawData.filter(d => d.isOverdue).length;
+            const finishRate = total > 0 ? (doneCnt / total * 100).toFixed(1) : 0;
+            
+            document.getElementById('kpiPanel').innerHTML = `
+                <div class="kpi-card"><h3>Total Tasks</h3><div class="num">${total}</div></div>
+                <div class="kpi-card"><h3>Completed (Done)</h3><div class="num" style="color:${colorMap.Done}">${doneCnt}</div></div>
+                <div class="kpi-card"><h3>In Progress</h3><div class="num" style="color:${colorMap['In Progress']}">${inProgressCnt}</div></div>
+                <div class="kpi-card"><h3>Open</h3><div class="num" style="color:${colorMap.Open}">${openCnt}</div></div>
+                <div class="kpi-card"><h3>Overdue Tasks</h3><div class="num" style="color:#dc2626">${overdueCnt}</div></div>
+                <div class="kpi-card"><h3>Completion Rate</h3><div class="num">${finishRate}%</div></div>
+            `;
+        }
+
+        function renderCoreCharts() {
+            const statusMode = document.getElementById('statusMode').value;
+            
+            const ctlPivot = buildPivot("control", statusMode);
+            if(chartControl) chartControl.dispose();
+            chartControl = echarts.init(document.getElementById('chartControl'));
+            chartControl.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                legend: { data: ctlPivot.statusOrder },
+                xAxis: { type: 'category', data: ctlPivot.names, axisLabel: { rotate: 30 } },
+                yAxis: { type: 'value', name: 'Task Count' },
+                series: ctlPivot.series
+            });
+            
+            const appPivot = buildPivot("app", statusMode);
+            if(chartApp) chartApp.dispose();
+            chartApp = echarts.init(document.getElementById('chartApp'));
+            chartApp.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                legend: { data: appPivot.statusOrder },
+                xAxis: { type: 'category', data: appPivot.names, axisLabel: { rotate: 40 } },
+                yAxis: { type: 'value', name: 'Task Count' },
+                series: appPivot.series
+            });
+            
+            const userPivot = buildPivot("assignee", statusMode);
+            if(chartAssignee) chartAssignee.dispose();
+            chartAssignee = echarts.init(document.getElementById('chartAssignee'));
+            chartAssignee.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                legend: { data: userPivot.statusOrder },
+                xAxis: { type: 'value', name: 'Task Count' },
+                yAxis: { type: 'category', data: userPivot.names },
+                series: userPivot.series.map(s => ({ ...s, type: 'bar' }))
+            });
+        }
+
+        // ===================== Fixed TopN Chart：加粗柱子、扩大左侧留白，完整展示Jira编号 =====================
+        function renderTopN() {
+            let topN = parseInt(document.getElementById('topN').value);
+            if (isNaN(topN) || topN < 1) topN = 10;
+            document.getElementById('topNTitle').textContent = topN;
+            document.getElementById('topNTableTitle').textContent = topN;
+
+            const unfinishedTasks = rawData
+                .filter(d => d.status !== "Done")
+                .sort((a, b) => b.agingDays - a.agingDays)
+                .slice(0, topN);
+
+            const displayList = [...unfinishedTasks].reverse();
+            const yLabels = displayList.map(t => `${t.jira} | ${t.assignee}`);
+
+            const allApps = [...new Set(displayList.map(i => i.app))];
+            allApps.forEach(app => getAppColor(app));
+
+            const seriesList = [];
+            allApps.forEach(appName => {
+                const dataArr = displayList.map(item => item.app === appName ? item.agingDays : null);
+                seriesList.push({
+                    name: appName,
+                    type: 'bar',
+                    barMaxWidth: 28, // 加粗柱子，解决线条过细
+                    data: dataArr,
+                    itemStyle: {
+                        color: getAppColor(appName)
+                    },
+                    label: {
+                        show: true,
+                        position: 'right',
+                        fontSize: 11,
+                        formatter: '{c}d'
+                    }
+                })
+            })
+
+            if(chartTopN) chartTopN.dispose();
+            chartTopN = echarts.init(document.getElementById('chartTopN'));
+
+            const tooltipFormatter = function(params) {
+                const task = displayList[params.dataIndex];
+                if(!task) return '';
+                return `
+                    <b>Jira#:</b> ${task.jira}<br/>
+                    <b>Assignee:</b> ${task.assignee}<br/>
+                    <b>Application:</b> ${task.app}<br/>
+                    <b>Control Issue:</b> ${task.control}<br/>
+                    <b>Status:</b> ${task.status}<br/>
+                    <b>Create Date:</b> ${task.createDate ? task.createDate.toLocaleDateString('en-US') : 'N/A'}<br/>
+                    <b>Aging Days:</b> ${task.agingDays}<br/>
+                    <b>Due Date:</b> ${task.dueDate ? task.dueDate.toLocaleDateString('en-US') : 'N/A'}
+                `;
+            };
+
+            chartTopN.setOption({
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: tooltipFormatter
+                },
+                legend: {
+                    type: 'scroll',
+                    bottom: 5,
+                    left: 'center',
+                    orient: 'horizontal',
+                    textStyle:{fontSize:11}
+                },
+                grid: {
+                    bottom: 100,
+                    left: 150, // 扩大左侧空间，防止Jira编号截断
+                    right: 40
+                },
+                xAxis: {
+                    type: 'value',
+                    name: 'Aging Days',
+                    nameTextStyle:{fontSize:12}
+                },
+                yAxis: {
+                    type: 'category',
+                    data: yLabels,
+                    axisLabel: {
+                        fontSize: 12,
+                        // 完整展示文本，不再强制截断
+                        formatter: function(val){
+                            return val;
+                        }
+                    }
+                },
+                series: seriesList
+            });
+
+            // Render Table
+            const tableBody = document.querySelector('#topNTable tbody');
+            tableBody.innerHTML = '';
+            unfinishedTasks.forEach(task => {
+                const row = document.createElement('tr');
+                const statusClass = task.status === 'Open' ? 'status-open' : 'status-inprogress';
+                row.innerHTML = `
+                    <td>${task.jira}</td>
+                    <td>${task.assignee}</td>
+                    <td>${task.app}</td>
+                    <td>${task.summary}</td>
+                    <td>${task.control}</td>
+                    <td><span class="status-tag ${statusClass}">${task.status}</span></td>
+                    <td>${task.createDate ? task.createDate.toLocaleDateString('en-US') : 'N/A'}</td>
+                    <td>${task.agingDays}d</td>
+                    <td>${task.dueDate ? task.dueDate.toLocaleDateString('en-US') : 'N/A'}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        function renderOverdueAnalysis() {
+            const overdueTasks = rawData.filter(d => d.isOverdue);
+            
+            const appOverdueMap = {};
+            overdueTasks.forEach(task => appOverdueMap[task.app] = (appOverdueMap[task.app]||0)+1);
+            const appNames = Object.keys(appOverdueMap);
+            const appData = appNames.map(k => appOverdueMap[k]);
+            if(chartOverdueApp) chartOverdueApp.dispose();
+            chartOverdueApp = echarts.init(document.getElementById('chartOverdueApp'));
+            chartOverdueApp.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                xAxis: { type: 'category', data: appNames, axisLabel: { rotate: 40 } },
+                yAxis: { type: 'value', name: 'Overdue Count' },
+                series: [{type: 'bar', data: appData, itemStyle:{color:'#dc2626'}, label:{show:true,position:'top'}}]
+            });
+            
+            const userOverdueMap = {};
+            overdueTasks.forEach(task => userOverdueMap[task.assignee] = (userOverdueMap[task.assignee]||0)+1);
+            const userNames = Object.keys(userOverdueMap);
+            const userData = userNames.map(k => userOverdueMap[k]);
+            if(chartOverdueAssignee) chartOverdueAssignee.dispose();
+            chartOverdueAssignee = echarts.init(document.getElementById('chartOverdueAssignee'));
+            chartOverdueAssignee.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                xAxis: { type: 'value', name: 'Overdue Count' },
+                yAxis: { type: 'category', data: userNames },
+                series: [{type: 'bar', data: userData, itemStyle:{color:'#dc2626'}, label:{show:true,position:'right'}}]
+            });
+            
+            const controlOverdueMap = {};
+            overdueTasks.forEach(task => controlOverdueMap[task.control] = (controlOverdueMap[task.control]||0)+1);
+            const controlNames = Object.keys(controlOverdueMap);
+            const controlData = controlNames.map(k => controlOverdueMap[k]);
+            if(chartOverdueControl) chartOverdueControl.dispose();
+            chartOverdueControl = echarts.init(document.getElementById('chartOverdueControl'));
+            chartOverdueControl.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                xAxis: { type: 'category', data: controlNames, axisLabel: { rotate: 30 } },
+                yAxis: { type: 'value', name: 'Overdue Count' },
+                series: [{type: 'bar', data: controlData, itemStyle:{color:'#dc2626'}, label:{show:true,position:'top'}}]
+            });
+            
+            const tableBody = document.querySelector('#overdueTable tbody');
+            tableBody.innerHTML = '';
+            overdueTasks.forEach(task => {
+                const row = document.createElement('tr');
+                const statusClass = task.status === 'Open' ? 'status-open' : 'status-inprogress';
+                const overdueDays = getDaysDiff(task.dueDate, reportDate);
+                row.innerHTML = `
+                    <td>${task.jira}</td>
+                    <td>${task.assignee}</td>
+                    <td>${task.app}</td>
+                    <td>${task.summary}</td>
+                    <td>${task.control}</td>
+                    <td><span class="status-tag ${statusClass}">${task.status}</span></td>
+                    <td>${task.createDate ? task.createDate.toLocaleDateString('en-US') : 'N/A'}</td>
+                    <td>${task.dueDate ? task.dueDate.toLocaleDateString('en-US') : 'N/A'}</td>
+                    <td><span class="status-tag overdue-tag">${overdueDays}d</span></td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        // ===================== Event Bind =====================
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('reportDate').textContent = reportDate.toLocaleDateString('en-US');
+            document.getElementById('baseDate').value = reportDate.toISOString().split('T')[0];
+            
+            document.getElementById('csvFile').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) loadCSV(file);
+            });
+            
+            document.getElementById('statusMode').addEventListener('change', renderCoreCharts);
+            document.getElementById('topN').addEventListener('input', renderTopN);
+            
+            document.getElementById('baseDate').addEventListener('change', function(e) {
+                const newDate = parseDate(e.target.value);
+                if (newDate) {
+                    reportDate = newDate;
+                    document.getElementById('reportDate').textContent = reportDate.toLocaleDateString('en-US');
+                    rawData = rawData.map(item => ({
+                        ...item,
+                        agingDays: getDaysDiff(item.createDate, reportDate),
+                        isOverdue: item.dueDate < reportDate && item.status !== "Done"
+                    }));
+                    renderAll();
+                }
+            });
+            
+            document.getElementById('loadSample').addEventListener('click', loadSampleData);
+            loadSampleData();
+        });
+    </script>
+</body>
+</html>
